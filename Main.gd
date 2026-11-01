@@ -1,0 +1,553 @@
+extends Node
+## The same authoritative simulation powers solo, listen host and dedicated server.
+const WorldScript = preload("res://World/World.gd")
+const PlayerScript = preload("res://Player/Player.gd")
+const Inventory = preload("res://Core/Inventory.gd")
+const Clock = preload("res://World/Clock.gd")
+const WeatherModel = preload("res://Weather/Weather.gd")
+const ExposureModel = preload("res://Weather/Exposure.gd")
+const Store = preload("res://Persistence/Store.gd")
+const HUDScript = preload("res://UI/HUD.gd")
+const SessionScript = preload("res://Networking/Session.gd")
+
+var world
+var player
+var hud
+var session
+var inventory = Inventory.new()
+var exposure = ExposureModel.new()
+var clock = Clock.new()
+var weather = WeatherModel.new()
+var players: Dictionary = {}
+var inventories: Dictionary = {}
+var exposures: Dictionary = {}
+var saved: Dictionary = {}
+var ready_world: bool = false
+var running: bool = false
+var tool: int = 1
+var quality: int = 1
+var vsync: bool = true
+var sound: bool = true
+var sensitivity: float = 0.003
+var autosave: float = 0.0
+var snapshot_timer: float = 0.0
+var save_folder: String = "user://world"
+var commands: Array[Dictionary] = []
+var menu_camera: Camera3D
+var world_signature: int = 0
+var cli: Dictionary = {}
+var smoke_elapsed: float = 0.0
+var snapshots_received: int = 0
+var smoke_origin: Vector3
+var smoke_seen: bool = false
+var smoke_action_sent: bool = false
+var smoke_attack_timer: float = 0.0
+var smoke_progress: float = 0.0
+var smoke_moved: bool = false
+var quitting: bool = false
+
+func _ready() -> void:
+	get_tree().auto_accept_quit = false
+	for arg in OS.get_cmdline_user_args():
+		var parts := arg.trim_prefix("--").split("=", true, 1)
+		cli[parts[0]] = parts[1] if parts.size() > 1 else "true"
+	save_folder = str(cli.get("save-dir", save_folder))
+	install_inputs()
+	load_settings()
+	world = WorldScript.new()
+	add_child(world)
+	session = SessionScript.new()
+	session.name = "Session"
+	add_child(session)
+	session.peer_joined.connect(_spawn_player)
+	session.peer_left.connect(_remove_player)
+	session.intent_received.connect(_receive_intent)
+	session.action_received.connect(func(id: int, action: String): commands.append({"id": id, "action": action}))
+	session.state_received.connect(_receive_state)
+	session.failed.connect(_network_failure)
+	hud = HUDScript.new()
+	hud.game = self
+	add_child(hud)
+	var settings := ConfigFile.new()
+	settings.load("user://settings.cfg")
+	hud.language = clampi(int(settings.get_value("ui", "language", 0)), 0, 1)
+	menu_camera = Camera3D.new()
+	menu_camera.position = Vector3(13, 9, 15)
+	add_child(menu_camera)
+	menu_camera.look_at(Vector3(0, 2, -4))
+	menu_camera.current = true
+	await world.generate(Callable(hud, "loading"))
+	world.set_quality(quality)
+	ready_world = true
+	saved = Store.load_world(save_folder)
+	hud.show_panel("menu")
+	if cli.has("server") or OS.has_feature("dedicated_server"):
+		_start_host(int(cli.get("port", 24567)), true)
+		if not running:
+			get_tree().quit(1)
+	elif cli.has("join"):
+		join_game(str(cli["join"]), int(cli.get("port", 24567)))
+	elif cli.has("play"):
+		new_game()
+	print("GAME_READY role=%s Godot=%s" % [session.role, Engine.get_version_info()["string"]])
+
+func install_inputs() -> void:
+	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D,
+		"sprint": KEY_SHIFT, "jump": KEY_SPACE, "inventory": KEY_TAB,
+		"menu": KEY_ESCAPE, "save": KEY_F5, "load": KEY_F9,
+		"axe": KEY_1, "build": KEY_2, "shelter": KEY_3}
+	for action in keys:
+		if not InputMap.has_action(action):
+			InputMap.add_action(action)
+		var event := InputEventKey.new()
+		event.physical_keycode = keys[action]
+		InputMap.action_add_event(action, event)
+	if not InputMap.has_action("use"):
+		InputMap.add_action("use")
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	InputMap.action_add_event("use", click)
+
+func _empty_world() -> Dictionary:
+	return {"version": 2, "seed": 1337, "players": {}, "cut": [], "fires": [],
+		"shelters": [], "phase": 450.0, "weather": WeatherModel.new().serialize()}
+
+func _begin_authority(data: Dictionary) -> bool:
+	var error: String = Store.acquire_lock(save_folder)
+	if error != "":
+		hud.notify_message(error)
+		push_error(error)
+		return false
+	_clear_players()
+	saved = data.duplicate(true)
+	world.restore(data)
+	clock.elapsed = float(data.get("phase", 450.0))
+	weather.restore(data.get("weather", {}))
+	running = true
+	autosave = 0.0
+	return true
+
+func new_game() -> void:
+	session.offline()
+	if _begin_authority(_empty_world()):
+		_spawn_player(1)
+		hud.show_panel("")
+
+func host_game(port: int = 24567) -> void:
+	_start_host(port, false)
+
+func _start_host(port: int, dedicated: bool) -> void:
+	var data: Dictionary = Store.load_world(save_folder)
+	if data.is_empty():
+		data = _empty_world()
+	if not _begin_authority(data):
+		return
+	var error: int = session.host_game(port, int(cli.get("max-players", 16)), dedicated)
+	if error != OK:
+		running = false
+		Store.release_lock(save_folder)
+		_network_failure(error_string(error))
+		return
+	if not dedicated:
+		_spawn_player(1)
+	hud.show_panel("")
+	print("SERVER_LISTENING port=%d dedicated=%s" % [port, dedicated])
+
+func join_game(address: String, port: int = 24567) -> void:
+	if running and session.is_authority():
+		if not save_game():
+			return
+		Store.release_lock(save_folder)
+	_clear_players()
+	running = false
+	hud.loading(hud.t("Conectando…", "Connecting…"))
+	var error: int = session.join_game(address, port)
+	if error != OK:
+		_network_failure(error_string(error))
+
+func _network_failure(message: String) -> void:
+	running = false
+	set_controls(false)
+	hud.show_panel("menu")
+	hud.notify_message(message)
+	printerr("NETWORK_FAILURE ", message)
+
+func _clear_players() -> void:
+	for body in players.values():
+		remove_child(body)
+		body.queue_free()
+	players.clear()
+	inventories.clear()
+	exposures.clear()
+	player = null
+	menu_camera.current = true
+
+func _spawn_player(id: int) -> void:
+	if players.has(id) or not running:
+		return
+	var body = PlayerScript.new()
+	body.name = "Player_%d" % id
+	body.world = world
+	body.authoritative = session.is_authority()
+	body.local_control = id == session.local_id and session.role != "dedicated"
+	add_child(body)
+	body.set_local(body.local_control)
+	var record_key: String = session.player_key(id) if session.is_authority() else str(id)
+	var record: Dictionary = saved.get("players", {}).get(record_key, {})
+	var origin: Array = record.get("position", [float(players.size()) * 1.5, world.height_at(float(players.size()) * 1.5, 0) + 0.2, 0])
+	body.position = Vector3(origin[0], origin[1], origin[2])
+	body.vitals.hp = int(record.get("hp", 100))
+	body.vitals.quiet_seconds = float(record.get("quiet_seconds", 0.0))
+	players[id] = body
+	inventories[id] = Inventory.new()
+	if record.has("inventory"):
+		inventories[id].restore(record["inventory"])
+	exposures[id] = ExposureModel.new()
+	if record.has("exposure"):
+		exposures[id].restore(record["exposure"])
+	body.respawned.connect(func():
+		if exposures.has(id):
+			exposures[id].reset()
+			exposures[id].wetness = 0.0)
+	if body.local_control:
+		player = body
+		inventory = inventories[id]
+		exposure = exposures[id]
+		body.enabled = hud.mode == ""
+	print("PLAYER_JOINED id=%d count=%d" % [id, players.size()])
+
+func _remove_player(id: int) -> void:
+	if not players.has(id):
+		return
+	# Retain disconnected state in the current server snapshot; IDs are session-scoped.
+	if session.is_authority():
+		if not saved.has("players"):
+			saved["players"] = {}
+		saved["players"][session.player_key(id)] = _player_record(id)
+	var body = players[id]
+	remove_child(body)
+	body.queue_free()
+	players.erase(id)
+	inventories.erase(id)
+	exposures.erase(id)
+	print("PLAYER_LEFT id=%d" % id)
+
+func _receive_intent(id: int, intent: Dictionary) -> void:
+	if running and session.is_authority() and players.has(id):
+		players[id].set_intent(intent)
+
+func _receive_action(id: int, action: String) -> void:
+	if not running or not session.is_authority():
+		return
+	if id == 1 and action.begins_with("weather_"):
+		weather.set_weather(action.trim_prefix("weather_"))
+		return
+	if id == 1 and action == "save":
+		save_game()
+		return
+	if not players.has(id):
+		return
+	var body = players[id]
+	var inv = inventories[id]
+	if body.vitals.hp <= 0:
+		return
+	match action:
+		"attack":
+			if not body.attack():
+				return
+			var target = world.nearest_tree(body)
+			if cli.has("network-debug"):
+				print("NETWORK_ATTACK id=%d position=%s yaw=%s target=%s" % [id, body.position, body.yaw, target.tree_id if target != null else -1])
+			if target != null:
+				# Reserve the reward before felling: full inventories cannot consume trees.
+				if target.hits >= 2:
+					if not inv.add("wood", 4):
+						return
+					target.hit()
+				else:
+					target.hit()
+		"craft_fire":
+			inv.craft_fire()
+		"craft_shelter":
+			inv.craft_shelter()
+		"place_fire", "place_shelter":
+			var kind := "shelter" if action == "place_shelter" else "campfire"
+			var place: Dictionary = world.placement(body, kind)
+			if place["valid"] and inv.consume(kind, 1):
+				if kind == "shelter":
+					world.add_shelter(place["position"])
+				else:
+					world.add_fire(place["position"])
+
+func _player_record(id: int) -> Dictionary:
+	var body = players[id]
+	return {"position": [body.position.x, body.position.y, body.position.z],
+		"inventory": inventories[id].items.duplicate(), "hp": body.vitals.hp,
+		"quiet_seconds": body.vitals.quiet_seconds, "exposure": exposures[id].state()}
+
+func snapshot() -> Dictionary:
+	var records: Dictionary = saved.get("players", {}).duplicate(true)
+	for id in players:
+		records[session.player_key(id)] = _player_record(id)
+	return {"version": 2, "seed": 1337, "players": records, "cut": world.cut_ids(),
+		"fires": world.fire_positions(), "shelters": world.shelter_positions(),
+		"phase": clock.elapsed, "weather": weather.serialize()}
+
+func network_state() -> Dictionary:
+	var bodies: Dictionary = {}
+	for id in players:
+		var state: Dictionary = players[id].export_state()
+		state["inventory"] = inventories[id].items.duplicate()
+		state["exposure"] = exposures[id].state()
+		bodies[str(id)] = state
+	return {"players": bodies, "cut": world.cut_ids(), "fires": world.fire_positions(),
+		"shelters": world.shelter_positions(), "phase": clock.elapsed, "weather": weather.serialize()}
+
+func _receive_state(data: Dictionary) -> void:
+	if session.is_authority() or not ready_world:
+		return
+	snapshots_received += 1
+	running = true
+	var signature: int = hash([data["cut"], data["fires"], data["shelters"]])
+	if signature != world_signature:
+		world.restore(data)
+		world_signature = signature
+	clock.elapsed = float(data["phase"])
+	weather.restore(data["weather"])
+	var ids: Array = []
+	for key in data["players"]:
+		var id := int(key)
+		ids.append(id)
+		if not players.has(id):
+			_spawn_player(id)
+		players[id].apply_state(data["players"][key])
+		inventories[id].restore(data["players"][key]["inventory"])
+		var e: Dictionary = data["players"][key]["exposure"]
+		exposures[id].exposure_seconds = float(e["exposure"])
+		exposures[id].wetness = float(e["wetness"])
+		exposures[id].temperature = float(e["temperature"])
+		exposures[id].comfort = bool(e["comfort"])
+		exposures[id].damage_count = int(e["rain_damage"])
+	for id in players.keys():
+		if not id in ids:
+			_remove_player(id)
+	if player != null and hud.mode == "loading":
+		hud.show_panel("")
+
+func save_game() -> bool:
+	if not running:
+		return true
+	if not session.is_authority():
+		hud.notify_message(hud.t("O servidor salva o mundo.", "The server saves the world."))
+		return false
+	var data := snapshot()
+	var error: String = Store.save_world(data, save_folder)
+	if error != "":
+		hud.notify_message(error)
+		push_error(error)
+		return false
+	saved = data
+	autosave = 0.0
+	hud.notify_message(hud.t("Progresso salvo.", "Progress saved."))
+	return true
+
+func load_game() -> void:
+	if session.role != "offline":
+		hud.notify_message(hud.t("Carregamento manual disponível no modo solo.", "Manual loading is available in solo mode."))
+		return
+	var data: Dictionary = Store.load_world(save_folder)
+	if data.is_empty():
+		hud.notify_message(hud.t("Nenhum salvamento válido.", "No valid save."))
+		return
+	if _begin_authority(data):
+		_spawn_player(1)
+		hud.show_panel("")
+
+func set_controls(active: bool) -> void:
+	if player != null:
+		player.enabled = active
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if active and player != null else Input.MOUSE_MODE_VISIBLE
+	if world != null and world.preview != null:
+		world.preview.hide()
+
+func set_quality(value: int) -> void:
+	quality = clampi(value, 0, 3)
+	world.set_quality(quality)
+	save_settings()
+
+func set_fps(value: int) -> void:
+	Engine.max_fps = clampi(value, 0, 240)
+	save_settings()
+
+func set_resolution(size: Vector2i) -> void:
+	DisplayServer.window_set_size(size)
+	save_settings()
+
+func set_sensitivity(value: float) -> void:
+	sensitivity = clampf(value, 0.0005, 0.01)
+	save_settings()
+
+func save_settings() -> void:
+	var config := ConfigFile.new()
+	config.set_value("video", "quality", quality)
+	config.set_value("video", "fps", Engine.max_fps)
+	config.set_value("video", "vsync", vsync)
+	config.set_value("video", "resolution", DisplayServer.window_get_size())
+	config.set_value("video", "fullscreen", DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN)
+	config.set_value("audio", "sound", sound)
+	config.set_value("input", "sensitivity", sensitivity)
+	if hud != null:
+		config.set_value("ui", "language", hud.language)
+	config.save("user://settings.cfg")
+
+func load_settings() -> void:
+	var config := ConfigFile.new()
+	config.load("user://settings.cfg")
+	quality = clampi(int(config.get_value("video", "quality", 1)), 0, 3)
+	Engine.max_fps = clampi(int(config.get_value("video", "fps", 60)), 0, 240)
+	sensitivity = clampf(float(config.get_value("input", "sensitivity", 0.003)), 0.0005, 0.01)
+	vsync = bool(config.get_value("video", "vsync", true))
+	sound = bool(config.get_value("audio", "sound", true))
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
+	AudioServer.set_bus_mute(0, not sound)
+	if DisplayServer.get_name() != "headless":
+		var resolution: Variant = config.get_value("video", "resolution", Vector2i(1280, 720))
+		if resolution is Vector2i and resolution.x >= 640 and resolution.y >= 360:
+			DisplayServer.window_set_size(resolution)
+		if bool(config.get_value("video", "fullscreen", false)):
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+
+func craft_fire() -> void:
+	session.send_action("craft_fire")
+
+func craft_shelter() -> void:
+	session.send_action("craft_shelter")
+
+func request_weather(value: String) -> void:
+	session.send_action("weather_" + value)
+
+func use_tool() -> void:
+	session.send_action({1: "attack", 2: "place_fire", 3: "place_shelter"}.get(tool, "attack"))
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not ready_world or player == null or (event is InputEventKey and event.echo):
+		return
+	if event.is_action_pressed("menu"):
+		hud.show_panel("pause" if hud.mode == "" else "")
+	elif event.is_action_pressed("inventory"):
+		hud.show_panel("" if hud.mode == "inventory" else "inventory")
+	elif event.is_action_pressed("save"):
+		save_game()
+	elif event.is_action_pressed("load"):
+		load_game()
+	elif hud.mode == "":
+		if event.is_action_pressed("axe"):
+			tool = 1
+		elif event.is_action_pressed("build"):
+			tool = 2
+		elif event.is_action_pressed("shelter"):
+			tool = 3
+		elif event.is_action_pressed("use"):
+			use_tool()
+
+func _physics_process(delta: float) -> void:
+	if not running or quitting:
+		return
+	if player != null:
+		if "sensitivity" in player:
+			player.sensitivity = sensitivity
+		var intent: Dictionary = player.input_intent()
+		if cli.has("smoke-client"):
+			var destination := Vector3(3, 0, -1) if str(cli["smoke-client"]) == "2" else Vector3(0, 0, -4)
+			var offset := Vector2(destination.x - player.position.x, destination.z - player.position.z)
+			var movement := offset.normalized() if offset.length() > 0.3 else Vector2.ZERO
+			intent = {"move": [movement.x, movement.y], "yaw": 0.0, "jump": false, "sprint": false}
+			smoke_progress += delta
+		session.send_intent(intent)
+	if session.is_authority():
+		while not commands.is_empty():
+			var command: Dictionary = commands.pop_front()
+			_receive_action(command["id"], command["action"])
+		var state: Dictionary = weather.state()
+		for id in players:
+			exposures[id].advance(delta, bool(state["raining"]), world.is_sheltered(players[id]), players[id].vitals, world.warmth_at(players[id].position))
+
+func _process(delta: float) -> void:
+	if not ready_world or quitting:
+		return
+	if session.is_authority():
+		clock.advance(delta)
+		weather.advance(delta)
+	world.apply_weather(weather.state())
+	world.illuminate(clock)
+	_run_cli_checks(delta)
+	if not running or quitting:
+		return
+	if session.is_authority():
+		autosave += delta
+		snapshot_timer += delta
+		if autosave >= 45.0:
+			autosave = 0.0
+			save_game()
+		if snapshot_timer >= 0.1:
+			snapshot_timer = 0.0
+			session.broadcast(network_state())
+	world.preview.visible = player != null and hud.mode == "" and tool in [2, 3] and inventory.count("shelter" if tool == 3 else "campfire") > 0
+	if world.preview.visible:
+		var place: Dictionary = world.placement(player, "shelter" if tool == 3 else "campfire")
+		world.preview.position = place["position"]
+		world.preview.scale = Vector3(3.6, 1, 3.6) if tool == 3 else Vector3.ONE
+		world.preview.material_override.albedo_color = Color(0.3, 1, 0.55, 0.45) if place["valid"] else Color(1, 0.25, 0.2, 0.45)
+
+func _run_cli_checks(delta: float) -> void:
+	if quitting:
+		return
+	smoke_elapsed += delta
+	if cli.has("smoke-client") and player != null:
+		if not smoke_seen:
+			smoke_origin = player.position
+			smoke_seen = true
+		if Vector2(player.position.x - smoke_origin.x, player.position.z - smoke_origin.z).length() > 1.0:
+			smoke_moved = true
+		if smoke_progress >= 2.0:
+			smoke_attack_timer -= delta
+			if smoke_attack_timer <= 0.0:
+				session.send_action("attack")
+				smoke_action_sent = true
+				smoke_attack_timer = 0.65
+		var collected := 0
+		for inv in inventories.values():
+			collected += inv.count("wood")
+		if players.size() >= 2 and snapshots_received >= 30 and smoke_moved and smoke_action_sent and not world.cut_ids().is_empty() and collected >= 4:
+			print("MULTIPLAYER_SMOKE_OK client=%s players=%d snapshots=%d moved=true shared_tree=true wood=%d" % [cli["smoke-client"], players.size(), snapshots_received, collected])
+			quit_game()
+	if cli.has("quit-after-seconds") and smoke_elapsed >= float(cli["quit-after-seconds"]):
+		quit_game()
+	if cli.has("smoke-client") and smoke_elapsed > 20.0:
+		printerr("MULTIPLAYER_SMOKE_FAILED snapshots=%d players=%d moved=%s" % [snapshots_received, players.size(), smoke_moved])
+		Store.release_lock(save_folder)
+		get_tree().quit(1)
+
+func quit_game() -> void:
+	if quitting:
+		return
+	if session.is_authority() and not save_game():
+		return
+	quitting = true
+	save_settings()
+	Store.release_lock(save_folder)
+	_stop_audio(self)
+	await session.graceful_leave()
+	# Spatial audio releases its mixer-thread playbacks asynchronously.
+	await get_tree().create_timer(0.2).timeout
+	get_tree().quit()
+
+func _stop_audio(node: Node) -> void:
+	if node is AudioStreamPlayer or node is AudioStreamPlayer3D:
+		node.stop()
+	for child in node.get_children():
+		_stop_audio(child)
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and session != null:
+		quit_game()
