@@ -31,8 +31,9 @@ jobs:
             if ($item.name.EndsWith('.zip')) {
               $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $path).ProviderPath)
               try {
+                $ArchiveRoot = $zip.Entries[0].FullName.Split('/')[0]
                 foreach ($doc in @('README.md', 'Docs/COMMUNICATION.md', 'Tests/MANUAL.md', 'Tools/Test-Windows.ps1')) {
-                  if (@($zip.Entries | Where-Object { $_.FullName.EndsWith('/' + $doc) }).Count -ne 1) { throw "Missing ZIP documentation: $doc" }
+                  if ($null -eq $zip.GetEntry($ArchiveRoot + '/' + $doc)) { throw "Missing ZIP documentation in $($item.name): $doc" }
                 }
               } finally { $zip.Dispose() }
             }
