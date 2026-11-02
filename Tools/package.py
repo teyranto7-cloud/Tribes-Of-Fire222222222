@@ -15,9 +15,11 @@ from build import source_signature
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '0.3.0-dev'
+VERSION = '0.3.1-dev'
 LICENSES = ('Godot-LICENSE.txt', 'Godot-COPYRIGHT.txt', 'Noto-CJK-COPYRIGHT.txt')
-DOCS = ('README.md', 'ARCHITECTURE.md', 'PROGRESS.md', 'CREDITS.md')
+DOCS = ('README.md', 'ARCHITECTURE.md', 'PROGRESS.md', 'CREDITS.md',
+        'Docs/COMMUNICATION.md', 'Docs/AUDIT.md', 'Docs/TEST_REPORT.md',
+        'Tests/MANUAL.md', 'Tools/Test-Windows.ps1')
 
 
 def stage(target: str, destination: Path) -> Path:
@@ -28,7 +30,8 @@ def stage(target: str, destination: Path) -> Path:
     source = ROOT / 'builds' / folder / filename
     if not source.is_file() or source.stat().st_size < 1024:
         raise SystemExit(f'Missing exported executable: {source}; run Tools/build.py')
-    magic = source.open('rb').read(4)
+    with source.open('rb') as stream:
+        magic = stream.read(4)
     if (target == 'Windows' and not magic.startswith(b'MZ')) or (
             target != 'Windows' and magic != b'\x7fELF'):
         raise SystemExit(f'Invalid executable header: {source}')
@@ -37,7 +40,15 @@ def stage(target: str, destination: Path) -> Path:
     for doc in DOCS:
         if not (ROOT / doc).is_file():
             raise SystemExit(f'Missing distribution documentation: {doc}')
-        shutil.copy2(ROOT / doc, destination / doc)
+        target_doc = destination / doc
+        target_doc.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / doc, target_doc)
+    # The manifest hashes the ZIP/installer itself, so embedding that checksum
+    # file inside the same package would create a circular dependency.
+    readme = destination / 'README.md'
+    checksum = f'https://github.com/teyranto7-cloud/Tribes-Of-Fire/blob/main/Downloads/{VERSION}/SHA256SUMS.txt'
+    readme.write_text(readme.read_text(encoding='utf-8').replace(
+        f'](Downloads/{VERSION}/SHA256SUMS.txt)', f']({checksum})'), encoding='utf-8')
     (destination / 'LICENSES').mkdir()
     for name in LICENSES:
         source_license = ROOT / 'LICENSES' / name
@@ -117,8 +128,11 @@ def main() -> None:
                 f'-DOUTPUT_FILE={installer}', f'-DPRODUCT_VERSION={VERSION}',
                 str(ROOT / 'Tools' / 'windows_installer.nsi'),
             ], check=True, cwd=ROOT, env=env)
-            if not installer.is_file() or not installer.open('rb').read(2) == b'MZ':
+            if not installer.is_file():
                 raise SystemExit('NSIS did not produce a Windows executable')
+            with installer.open('rb') as stream:
+                if stream.read(2) != b'MZ':
+                    raise SystemExit('NSIS did not produce a Windows executable')
             artifacts.append(installer)
     source_zip = out / f'TribesOfFire-{VERSION}-Source.zip'
     with zipfile.ZipFile(source_zip, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
@@ -128,7 +142,13 @@ def main() -> None:
                 path = Path(directory) / name
                 if path.is_symlink():
                     raise SystemExit('Source archive refuses unexpected symlink: ' + str(path))
-                archive.write(path, 'TribesOfFire/' + path.relative_to(ROOT).as_posix())
+                member = 'TribesOfFire/' + path.relative_to(ROOT).as_posix()
+                if path == ROOT / 'README.md':
+                    checksum = f'https://github.com/teyranto7-cloud/Tribes-Of-Fire/blob/main/Downloads/{VERSION}/SHA256SUMS.txt'
+                    archive.writestr(member, path.read_text(encoding='utf-8').replace(
+                        f'](Downloads/{VERSION}/SHA256SUMS.txt)', f']({checksum})'))
+                else:
+                    archive.write(path, member)
     with zipfile.ZipFile(source_zip) as archive:
         if archive.testzip() is not None:
             raise SystemExit('Source archive integrity failed')

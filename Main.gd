@@ -57,6 +57,7 @@ var smoke_progress: float = 0.0
 var smoke_moved: bool = false
 var smoke_completed: bool = false
 var quitting: bool = false
+var _last_wall_usec: int = Time.get_ticks_usec()
 
 func _ready() -> void:
 	get_tree().auto_accept_quit = false
@@ -93,13 +94,15 @@ func _ready() -> void:
 	add_child(hud)
 	var settings := ConfigFile.new()
 	settings.load("user://settings.cfg")
-	hud.language = clampi(int(settings.get_value("ui", "language", 0)), 0, 1)
+	hud.language = int(_config_number(settings.get_value("ui", "language", 0), 0, 0, 5))
 	menu_camera = Camera3D.new()
 	menu_camera.position = Vector3(13, 9, 15)
 	add_child(menu_camera)
 	menu_camera.look_at(Vector3(0, 2, -4))
 	menu_camera.current = true
 	await world.generate(Callable(hud, "loading"))
+	if quitting:
+		return
 	graphics.apply_current(world, get_viewport())
 	runtime = RuntimeScript.new()
 	runtime.name = "Runtime"
@@ -119,7 +122,8 @@ func _ready() -> void:
 	if cli.has("server") or OS.has_feature("dedicated_server"):
 		_start_host(int(cli.get("port", 24567)), true)
 		if not running:
-			get_tree().quit(1)
+			await quit_game(1, false)
+			return
 	elif cli.has("join"):
 		join_game(str(cli["join"]), int(cli.get("port", 24567)))
 	elif cli.has("play"):
@@ -161,12 +165,14 @@ func _begin_authority(data: Dictionary) -> bool:
 		push_error(error)
 		return false
 	_clear_players()
+	_reset_communication()
 	saved = data.duplicate(true)
 	world.restore(data)
 	runtime.restore(data)
 	clock.elapsed = float(data.get("phase", 450.0))
 	weather.restore(data.get("weather", {}))
 	running = true
+	_last_wall_usec = Time.get_ticks_usec()
 	autosave = 0.0
 	return true
 
@@ -174,13 +180,19 @@ func new_game() -> void:
 	session.offline()
 	if _begin_authority(_empty_world()):
 		_spawn_player(1)
+		if player == null: return
 		hud.show_panel("character" if player.creation_pending else "")
 
 func host_game(port: int = 24567) -> void:
 	_start_host(port, false)
 
 func _start_host(port: int, dedicated: bool) -> void:
-	var data: Dictionary = Store.load_world(save_folder)
+	var opened: Dictionary = Store.open_world(save_folder, true)
+	if not opened["error"].is_empty():
+		hud.notify_message(opened["error"])
+		printerr("PERSISTENCE_REFUSED ", opened["error"])
+		return
+	var data: Dictionary = opened["data"]
 	if data.is_empty():
 		data = _empty_world()
 	if not _begin_authority(data):
@@ -191,8 +203,10 @@ func _start_host(port: int, dedicated: bool) -> void:
 		Store.release_lock(save_folder)
 		_network_failure(error_string(error))
 		return
+	session.set_world_owner(str(saved.get("host_identity", "")) if dedicated else session.local_identity_hash())
 	if not dedicated:
 		_spawn_player(1)
+		if player == null: return
 	hud.show_panel("character" if player != null and player.creation_pending else "")
 	print("SERVER_LISTENING port=%d dedicated=%s" % [port, dedicated])
 
@@ -202,6 +216,7 @@ func join_game(address: String, port: int = 24567) -> void:
 			return
 		Store.release_lock(save_folder)
 	_clear_players()
+	_reset_communication()
 	running = false
 	hud.loading(hud.t("Conectando…", "Connecting…"))
 	var error: int = session.join_game(address, port)
@@ -212,6 +227,12 @@ func _network_failure(message: String) -> void:
 	if diagnostics != null:
 		diagnostics.record("network_failure")
 	running = false
+	commands.clear()
+	if session != null:
+		session.close()
+	_clear_players()
+	_reset_communication()
+	saved = Store.load_world(save_folder)
 	set_controls(false)
 	hud.show_panel("menu")
 	hud.notify_message(message)
@@ -226,12 +247,37 @@ func _clear_players() -> void:
 	exposures.clear()
 	if runtime != null:
 		runtime.needs.clear()
+		runtime.combat.cooldowns.clear()
+		runtime.combat.dodge_cooldowns.clear()
+		if runtime.mining != null: runtime.mining._cooldowns.clear()
+		if runtime.audio != null:
+			runtime.audio.step_positions.clear()
+			runtime.audio.step_distance.clear()
 	player = null
 	menu_camera.current = true
+
+func _reset_communication() -> void:
+	if runtime != null:
+		runtime.reset_local_communication()
+	if chat_ui != null:
+		chat_ui.reset_session()
 
 func _spawn_player(id: int) -> void:
 	if players.has(id) or not running:
 		return
+	if session.is_authority():
+		var known: Dictionary = saved.get("players", {}).duplicate()
+		for existing in players:
+			known[session.player_key(existing)] = true
+		var identity: String = session.player_key(id)
+		if not known.has(identity) and (known.size() >= Store.MAX_PLAYERS or not Store.profile_room(snapshot())):
+			var reason := "Limite de perfis salvos atingido / Saved player profile limit reached."
+			if id == 1:
+				Store.release_lock(save_folder)
+				_network_failure(reason)
+			else:
+				session.reject_peer(id, reason)
+			return
 	var body = PlayerScript.new()
 	body.name = "Player_%d" % id
 	body.world = world
@@ -245,7 +291,7 @@ func _spawn_player(id: int) -> void:
 	var origin: Array = record.get("position", [float(players.size()) * 1.5, world.height_at(float(players.size()) * 1.5, 0) + 0.2, 0])
 	body.position = Vector3(origin[0], origin[1], origin[2])
 	body.vitals.hp = int(record.get("hp", 100))
-	body.vitals.regen_delay = clampf(float(cli.get("regen-delay", "6")), 0, 60)
+	body.vitals.regen_delay = _config_number(float(cli.get("regen-delay", "6")), 6, 0, 60)
 	body.vitals.quiet_seconds = float(record.get("quiet_seconds", 0.0))
 	players[id] = body
 	inventories[id] = Inventory.new()
@@ -266,6 +312,8 @@ func _spawn_player(id: int) -> void:
 		survival = runtime.needs[id]
 		body.enabled = hud.mode == ""
 	print("PLAYER_JOINED id=%d count=%d" % [id, players.size()])
+	if session.is_authority():
+		runtime.publish_channels.call_deferred()
 
 func _remove_player(id: int) -> void:
 	if not players.has(id):
@@ -276,6 +324,12 @@ func _remove_player(id: int) -> void:
 			saved["players"] = {}
 		saved["players"][session.player_key(id)] = _player_record(id)
 	var body = players[id]
+	var instance: int = body.get_instance_id()
+	runtime.combat.cooldowns.erase(instance)
+	runtime.combat.dodge_cooldowns.erase(instance)
+	runtime.mining._cooldowns.erase(instance)
+	runtime.audio.step_positions.erase(id)
+	runtime.audio.step_distance.erase(id)
 	runtime.channels.disconnected(session.player_key(id))
 	runtime.needs.erase(id)
 	remove_child(body)
@@ -283,6 +337,8 @@ func _remove_player(id: int) -> void:
 	players.erase(id)
 	inventories.erase(id)
 	exposures.erase(id)
+	if session.is_authority():
+		runtime.publish_channels.call_deferred()
 	print("PLAYER_LEFT id=%d" % id)
 
 func _receive_intent(id: int, intent: Dictionary) -> void:
@@ -359,6 +415,9 @@ func snapshot() -> Dictionary:
 		"fires": world.fire_positions(), "shelters": world.shelter_positions(),
 		"phase": clock.elapsed, "weather": weather.serialize()}
 	data.merge(runtime.save_state(), true)
+	var owner: String = session.local_identity_hash() if session.role in ["offline", "host"] else str(saved.get("host_identity", ""))
+	if not owner.is_empty():
+		data["host_identity"] = owner
 	return data
 
 func network_state() -> Dictionary:
@@ -399,6 +458,8 @@ func _receive_state(data: Dictionary) -> void:
 		players[id].apply_state(data["players"][key])
 		inventories[id].restore(data["players"][key].get("inventory_state", data["players"][key]["inventory"]))
 		players[id].set_meta("key", data["players"][key].get("key", ""))
+		if id == session.local_id:
+			session.set_local_profile_key(str(data["players"][key].get("key", "")))
 		runtime.needs[id].restore(data["players"][key].get("survival", {}))
 		var e: Dictionary = data["players"][key]["exposure"]
 		exposures[id].exposure_seconds = float(e["exposure"])
@@ -441,15 +502,22 @@ func load_game() -> void:
 	if session.role != "offline":
 		hud.notify_message(hud.t("Carregamento manual disponível no modo solo.", "Manual loading is available in solo mode."))
 		return
-	var data: Dictionary = Store.load_world(save_folder)
-	if data.is_empty():
-		hud.notify_message(hud.t("Nenhum salvamento válido.", "No valid save."))
+	var opened: Dictionary = Store.open_world(save_folder, false)
+	if not opened["error"].is_empty():
+		hud.notify_message(opened["error"])
 		return
+	var data: Dictionary = opened["data"]
 	if _begin_authority(data):
 		_spawn_player(1)
+		if player == null: return
 		hud.show_panel("character" if player.creation_pending else "")
 
 func set_controls(active: bool) -> void:
+	active = active and running and player != null and not player.creation_pending and player.vitals.hp > 0
+	if hud != null:
+		active = active and hud.mode == ""
+	if chat_ui != null and chat_ui.panel != null:
+		active = active and not chat_ui.panel.visible
 	if player != null:
 		player.enabled = active
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if active and player != null else Input.MOUSE_MODE_VISIBLE
@@ -491,23 +559,30 @@ func save_settings() -> void:
 		config.set_value("ui", "language", hud.language)
 	config.save("user://settings.cfg")
 
-func load_settings() -> void:
+static func _config_number(value: Variant, fallback: float, minimum: float, maximum: float) -> float:
+	if not (value is int or value is float) or not is_finite(float(value)):
+		return fallback
+	return clampf(float(value), minimum, maximum)
+
+static func _config_bool(value: Variant, fallback: bool) -> bool:
+	return value if value is bool else fallback
+
+func load_settings(path: String = "user://settings.cfg") -> void:
 	var config := ConfigFile.new()
-	config.load("user://settings.cfg")
-	quality = clampi(int(config.get_value("video", "quality", 1)), 0, 3)
-	Engine.max_fps = clampi(int(config.get_value("video", "fps", 60)), 0, 240)
-	sensitivity = clampf(float(config.get_value("input", "sensitivity", 0.003)), 0.0005, 0.01)
-	if not is_finite(sensitivity): sensitivity = 0.003
-	camera_smoothing = bool(config.get_value("input", "camera_smoothing", true))
-	vsync = bool(config.get_value("video", "vsync", true))
-	sound = bool(config.get_value("audio", "sound", true))
+	config.load(path)
+	quality = int(_config_number(config.get_value("video", "quality", 1), 1, 0, 3))
+	Engine.max_fps = int(_config_number(config.get_value("video", "fps", 60), 60, 0, 240))
+	sensitivity = _config_number(config.get_value("input", "sensitivity", 0.003), 0.003, 0.0005, 0.01)
+	camera_smoothing = _config_bool(config.get_value("input", "camera_smoothing", true), true)
+	vsync = _config_bool(config.get_value("video", "vsync", true), true)
+	sound = _config_bool(config.get_value("audio", "sound", true), true)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
 	AudioServer.set_bus_mute(0, not sound)
-	if DisplayServer.get_name() != "headless":
+	if DisplayServer.get_name() != "headless" and not cli.has("safe") and not cli.has("reset-graphics"):
 		var resolution: Variant = config.get_value("video", "resolution", Vector2i(1280, 720))
-		if resolution is Vector2i and resolution.x >= 640 and resolution.y >= 360:
+		if resolution is Vector2i and resolution.x >= 640 and resolution.y >= 360 and resolution.x <= 7680 and resolution.y <= 4320:
 			DisplayServer.window_set_size(resolution)
-		if bool(config.get_value("video", "fullscreen", false)):
+		if _config_bool(config.get_value("video", "fullscreen", false), false):
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 
 func craft_fire() -> void:
@@ -573,24 +648,29 @@ func _physics_process(delta: float) -> void:
 				runtime.command(command["id"], command["command"], command["data"])
 			else:
 				_receive_action(command["id"], command["action"])
-		var state: Dictionary = weather.state()
-		for id in players:
-			if not players[id].creation_pending:
-				exposures[id].advance(delta, bool(state["raining"]), world.is_sheltered(players[id]), players[id].vitals, world.warmth_at(players[id].position), runtime.safe(id))
 
 func _process(delta: float) -> void:
 	if not ready_world or quitting:
 		return
+	var now := Time.get_ticks_usec()
+	var wall_delta := maxf(0, float(now - _last_wall_usec) / 1000000.0)
+	_last_wall_usec = now
 	if session.is_authority():
-		clock.advance(delta)
-		weather.advance(delta)
+		clock.advance(wall_delta)
+		weather.advance(wall_delta)
+		if running:
+			var state: Dictionary = weather.state()
+			for id in players:
+				if not players[id].creation_pending:
+					runtime.needs[id].advance(wall_delta, players[id].vitals)
+					exposures[id].advance(wall_delta, bool(state["raining"]), world.is_sheltered(players[id]), players[id].vitals, world.warmth_at(players[id].position), runtime.safe(id))
 	world.apply_weather(weather.state())
 	world.illuminate(clock)
 	_run_cli_checks(delta)
 	if not running or quitting:
 		return
 	if session.is_authority():
-		autosave += delta
+		autosave += wall_delta
 		snapshot_timer += delta
 		if autosave >= 45.0:
 			autosave = 0.0
@@ -635,22 +715,27 @@ func _run_cli_checks(delta: float) -> void:
 		Store.release_lock(save_folder)
 		get_tree().quit(1)
 
-func quit_game() -> void:
+func quit_game(exit_code: int = 0, save_progress: bool = true) -> void:
 	if quitting:
 		return
-	if session.is_authority() and not save_game():
+	if save_progress and session != null and session.is_authority() and not save_game():
 		return
 	quitting = true
+	if world != null:
+		world.cancel_generation()
 	save_settings()
-	diagnostics.record("shutdown", {"role": session.role})
+	if diagnostics != null:
+		diagnostics.record("shutdown", {"role": session.role if session != null else "starting"})
 	Store.release_lock(save_folder)
-	runtime.audio.stop()
-	runtime.voice.stop()
+	if runtime != null:
+		if runtime.audio != null: runtime.audio.stop()
+		if runtime.voice != null: runtime.voice.stop()
 	_stop_audio(self)
-	await session.graceful_leave()
+	if session != null:
+		await session.graceful_leave()
 	# Spatial audio releases its mixer-thread playbacks asynchronously.
 	await get_tree().create_timer(0.2).timeout
-	get_tree().quit()
+	get_tree().quit(exit_code)
 
 func _stop_audio(node: Node) -> void:
 	if node is AudioStreamPlayer or node is AudioStreamPlayer3D:

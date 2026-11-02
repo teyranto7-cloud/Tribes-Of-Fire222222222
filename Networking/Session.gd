@@ -32,6 +32,7 @@ var _pending: Dictionary = {}
 var _keys: Dictionary = {}
 var _identity: String = ""
 var _leaving: bool = false
+var _world_owner: String = ""
 
 func _ready() -> void:
 	multiplayer.peer_connected.connect(_peer_connected)
@@ -50,6 +51,24 @@ func _process(_delta: float) -> void:
 
 func player_key(id: int) -> String:
 	return "1" if id == 1 else str(_keys.get(id, ""))
+
+func local_identity_hash() -> String:
+	if _identity.is_empty() and not _load_identity():
+		return ""
+	return _identity.sha256_text()
+
+func set_world_owner(identity_hash: String) -> void:
+	_world_owner = identity_hash if _valid_identity(identity_hash) else ""
+
+func set_local_profile_key(key: String) -> void:
+	if role == "client" and local_id > 1 and (key == "1" or _valid_identity(key)):
+		_keys[local_id] = key
+
+func profile_key_for_identity(identity_hash: String) -> String:
+	var key := "1" if not _world_owner.is_empty() and identity_hash == _world_owner else identity_hash
+	if key in _keys.values() or (role == "host" and key == "1"):
+		return ""
+	return key
 
 static func _valid_identity(value: String) -> bool:
 	if value.length() != 64:
@@ -131,6 +150,7 @@ func close() -> void:
 	_pending.clear()
 	_keys.clear()
 	_rate.clear()
+	_world_owner = ""
 	role = "offline"
 	local_id = 1
 
@@ -269,9 +289,9 @@ func _authenticate(token: String) -> void:
 		_pending.erase(sender)
 		multiplayer.multiplayer_peer.disconnect_peer(sender)
 		return
-	var key := token.sha256_text()
+	var key := profile_key_for_identity(token.sha256_text())
 	# A reconnect can reclaim an offline record, never another currently active peer.
-	if key in _keys.values():
+	if key.is_empty():
 		_pending.erase(sender)
 		multiplayer.multiplayer_peer.disconnect_peer(sender)
 		return
@@ -304,11 +324,28 @@ func _peer_connected(id: int) -> void:
 func _peer_disconnected(id: int) -> void:
 	_pending.erase(id)
 	if accepted_peers.erase(id):
-		_rate.erase("%d:input" % id)
-		_rate.erase("%d:action" % id)
+		for bucket in _rate.keys():
+			if str(bucket).begins_with("%d:" % id):
+				_rate.erase(bucket)
 		peer_left.emit(id)
 		# peer_left handlers can still resolve the stable player key while persisting.
 		_keys.erase(id)
+
+func reject_peer(id: int, reason: String) -> void:
+	if role not in ["host", "dedicated"] or not accepted_peers.has(id):
+		return
+	_rejected.rpc_id(id, reason.left(240))
+	_peer_disconnected(id)
+	var transport := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	if transport != null:
+		var peer := transport.get_peer(id)
+		if peer != null:
+			peer.peer_disconnect_later()
+
+@rpc("authority", "call_remote", "reliable")
+func _rejected(reason: String) -> void:
+	if role == "client":
+		failed.emit(reason)
 
 func _connected() -> void:
 	if role == "client":

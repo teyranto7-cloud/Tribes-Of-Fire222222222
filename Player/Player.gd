@@ -277,15 +277,19 @@ func input_intent() -> Dictionary:
 	var move := Vector2.ZERO
 	var sprint := false
 	var jump := false
-	if local_control and enabled and death_left <= 0:
+	var active: bool = local_control and enabled and death_left <= 0 and vitals.hp > 0 and not creation_pending
+	if active:
 		move = Input.get_vector("left", "right", "forward", "back")
 		sprint = Input.is_action_pressed("sprint")
 		jump = Input.is_action_just_pressed("jump")
 	return {"move": [move.x, move.y], "yaw": yaw, "jump": jump, "sprint": sprint,
-		"crouch": enabled and Input.is_action_pressed("crouch"), "block": enabled and Input.is_action_pressed("block"), "dodge": enabled and Input.is_action_just_pressed("dodge")}
+		"crouch": active and Input.is_action_pressed("crouch"), "block": active and Input.is_action_pressed("block"), "dodge": active and Input.is_action_just_pressed("dodge")}
 
 
 func set_intent(data: Dictionary) -> void:
+	if vitals.hp <= 0 or creation_pending:
+		_clear_intent()
+		return
 	var raw: Variant = data.get("move", [0.0, 0.0])
 	var move := Vector2.ZERO
 	if raw is Vector2:
@@ -310,6 +314,15 @@ func set_intent(data: Dictionary) -> void:
 	_jump = _jump or data.get("jump", false) == true
 	_intent_age = 0.0
 
+func _clear_intent() -> void:
+	_move = Vector2.ZERO
+	_sprint = false
+	_jump = false
+	blocking = false
+	crouching = false
+	dodging = 0.0
+	_dodge_direction = Vector3.ZERO
+
 
 func _finite_number(value: Variant) -> bool:
 	return (value is float or value is int) and is_finite(float(value))
@@ -317,6 +330,10 @@ func _finite_number(value: Variant) -> bool:
 
 func _physics_process(delta: float) -> void:
 	_age += delta
+	if vitals.hp <= 0:
+		_clear_intent()
+		velocity.x = 0.0
+		velocity.z = 0.0
 	dodging = maxf(0, dodging - delta)
 	dodge_cooldown = maxf(0, dodge_cooldown - delta)
 	attack_time = maxf(0, attack_time - delta)
@@ -446,6 +463,10 @@ func attack() -> bool:
 
 
 func respawn() -> void:
+	_clear_intent()
+	attack_time = 0.0
+	dodge_cooldown = 0.0
+	_intent_age = INTENT_TIMEOUT
 	var y := 1.6
 	if is_instance_valid(world) and world.has_method("height_at"):
 		y = float(world.height_at(0.0, 0.0)) + 0.2

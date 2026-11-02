@@ -46,7 +46,12 @@ func closest(body: Node3D, reach: float = 3.0, facing: bool = false) -> int:
 		chosen = i
 	return chosen
 func mine(body, inventory, id: int, hand: bool = false) -> bool:
-	if id < 0 or id >= nodes.size() or not body.authoritative or body.position.distance_to(nodes[id].position) > 3.0 or stocks[id] <= 0:
+	if id < 0 or id >= nodes.size() or not body.authoritative or body.vitals.hp <= 0 or body.position.distance_to(nodes[id].position) > 3.0 or stocks[id] <= 0:
+		return false
+	var query := PhysicsRayQueryParameters3D.create(body.global_position + Vector3.UP,
+		nodes[id].global_position + Vector3.UP * 0.6, 1)
+	query.exclude = [body.get_rid(), nodes[id].get_rid()]
+	if not get_world_3d().direct_space_state.intersect_ray(query).is_empty():
 		return false
 	var kind: String = KINDS[id % KINDS.size()]
 	if hand and kind not in ["berries", "fiber", "stone", "wood"]:

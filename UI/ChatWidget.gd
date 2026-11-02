@@ -92,9 +92,22 @@ func open(choice: String = "", recipient: String = "") -> void:
 func hide_chat() -> void:
 	panel.hide()
 	minimized.show()
-	minimized.text = "Chat [Enter]"
+	minimized.text = tr("Chat") + " [Enter]"
 	field.release_focus()
 	game.set_controls(game.hud.mode == "")
+
+func reset_session() -> void:
+	panel.hide()
+	field.release_focus()
+	field.clear()
+	history.clear()
+	unread = 0
+	target = ""
+	channel = "global"
+	identity_list.clear()
+	targets.clear()
+	minimized.show()
+	minimized.text = tr("Chat") + " [Enter]"
 func _targets() -> void:
 	targets.clear()
 	identity_list.clear()

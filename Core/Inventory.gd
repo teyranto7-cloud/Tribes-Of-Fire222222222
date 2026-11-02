@@ -20,11 +20,16 @@ func can_add(item: String, amount: int) -> bool:
 		return false
 	return item in slots.map(func(s): return s.get("id", "")) or slots.any(func(s): return s.is_empty())
 
-func add(item: String, amount: int) -> bool:
+func add(item: String, amount: int, wear: int = -1) -> bool:
+	if wear < -1 or wear > 100:
+		return false
 	if not can_add(item, amount):
 		return false
-	if count(item) == 0 and (Catalog.WEAPONS.has(item) or Catalog.ARMOR.has(item) or item == "shield"):
-		durability[item] = 100
+	if Catalog.WEAPONS.has(item) or Catalog.ARMOR.has(item) or item == "shield":
+		var received_wear := 100 if wear < 0 else wear
+		# Durability is currently shared per item type. Receiving another copy must
+		# never repair a worn copy already carried or equipped.
+		durability[item] = received_wear if count(item) == 0 else mini(int(durability.get(item, 100)), received_wear)
 	items[item] = count(item) + amount
 	_signature = 0
 	_ensure_slots()
@@ -179,6 +184,9 @@ func take_slot(index: int, amount: int) -> Dictionary:
 	if index < 0 or index >= SLOT_COUNT or slots[index].is_empty() or amount <= 0 or int(slots[index]["count"]) < amount:
 		return {}
 	var result := {"id": slots[index]["id"], "count": amount}
+	var id: String = result["id"]
+	if Catalog.WEAPONS.has(id) or Catalog.ARMOR.has(id) or id == "shield":
+		result["durability"] = int(durability.get(id, 100))
 	slots[index]["count"] -= amount
 	if slots[index]["count"] == 0:
 		slots[index] = {}
@@ -202,6 +210,9 @@ func wear_equipment(key: String, amount: int) -> void:
 	durability[id] = maxi(0, int(durability.get(id, 100)) - amount)
 	if durability[id] == 0:
 		consume(id, 1)
+		if count(id) > 0:
+			# A spare copy is usable after the equipped one breaks.
+			durability[id] = 100
 		equipment[key] = ""
 
 func transact(costs: Dictionary, rewards: Dictionary) -> bool:

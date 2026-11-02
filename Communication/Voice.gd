@@ -70,9 +70,26 @@ func set_enabled(value: bool) -> void:
 	else:
 		microphone.stop()
 		testing = false
-		for receiver in receivers.values():
-			receiver["queue"].clear()
+		for id in receivers.keys():
+			_drop_receiver(id)
 	capture.clear_buffer()
+
+func stop_test() -> void:
+	# A local loopback test must not keep diverting PTT after its panel is closed.
+	testing = false
+	queued.clear()
+	if capture != null:
+		capture.clear_buffer()
+	_drop_receiver(-1)
+
+func _drop_receiver(id: int) -> void:
+	if not receivers.has(id):
+		return
+	var output = receivers[id]["player"]
+	if is_instance_valid(output):
+		output.stop()
+		output.queue_free()
+	receivers.erase(id)
 
 func save_settings() -> void:
 	var config := ConfigFile.new()
@@ -91,7 +108,8 @@ func _process(delta: float) -> void:
 	if enabled and capture != null:
 		var frames := capture.get_frames_available()
 		if frames > 0:
-			var input := capture.get_buffer(mini(frames, 4096))
+			# Drain the bounded capture ring even when the render rate is below 12 FPS.
+			var input := capture.get_buffer(mini(frames, maxi(4096, int(AudioServer.get_mix_rate() * 0.5))))
 			var ratio := 16000.0 / AudioServer.get_mix_rate()
 			level = 0.0
 			for frame in input:
@@ -119,26 +137,31 @@ func _process(delta: float) -> void:
 	for id in receivers.keys():
 		var receiver: Dictionary = receivers[id]
 		if id >= 0 and (not game.players.has(id) or _clock - float(receiver["last"]) > 5.0):
-			receiver["player"].stop()
-			receiver["player"].queue_free()
-			receivers.erase(id)
+			_drop_receiver(id)
 			continue
-		var playback: AudioStreamGeneratorPlayback = receiver["playback"]
-		var queue: Array = receiver["queue"]
-		if queue.is_empty() or (not receiver["started"] and queue.size() < 2 and _clock - float(receiver["last"]) < 0.08):
-			continue
-		receiver["started"] = true
-		if playback.get_frames_available() >= 640:
-			var samples: PackedVector2Array = queue.pop_front()
-			playback.push_buffer(samples)
-			played_samples += samples.size()
-		var output = receiver["player"]
 		var identity: String = game.runtime.key(id) if id >= 0 and game.players.has(id) else str(id)
+		if bool(muted.get(identity, false)):
+			_drop_receiver(id)
+			continue
+		var output = receiver["player"]
 		var gain := volume * float(individual_volume.get(identity, 1.0))
 		if receiver["channel"] in ["local", "proximity"] and game.player != null and game.players.has(id):
 			output.position = game.players[id].position + Vector3.UP * 1.4
 			gain *= proximity_gain(game.player.position.distance_to(game.players[id].position))
 		output.volume_db = linear_to_db(maxf(0.0001, gain))
+		var playback: AudioStreamGeneratorPlayback = receiver["playback"]
+		var queue: Array = receiver["queue"]
+		if queue.is_empty() or (not receiver["started"] and queue.size() < 2 and _clock - float(receiver["last"]) < 0.08):
+			continue
+		receiver["started"] = true
+		# At 10 FPS the mixer needs 2–3 packets per render frame, rather than one.
+		# The existing queue limit of five packets bounds both work and latency.
+		while not queue.is_empty():
+			var samples: PackedVector2Array = queue[0]
+			if playback.get_frames_available() < samples.size() or not playback.push_buffer(samples):
+				break
+			queue.pop_front()
+			played_samples += samples.size()
 
 static func proximity_gain(distance: float, maximum: float = 30.0) -> float:
 	if not is_finite(distance) or distance >= maximum:
@@ -192,11 +215,6 @@ func receive(id: int, seq: int, packet: PackedByteArray, voice_channel: String) 
 
 func stop() -> void:
 	set_enabled(false)
-	for receiver in receivers.values():
-		if is_instance_valid(receiver["player"]):
-			receiver["player"].stop()
-			receiver["player"].queue_free()
-	receivers.clear()
 
 func _exit_tree() -> void:
 	if microphone != null and capture != null:

@@ -9,7 +9,7 @@ const Survival = preload("res://Survival/Survival.gd")
 const Tribes = preload("res://Tribes/System.gd")
 const Wildlife = preload("res://Animals/Director.gd")
 const Channels = preload("res://Communication/Channels.gd")
-const MAX_BYTES := 2097152
+const MAX_BYTES := 16777216
 const MAX_PLAYERS := 1024
 static var owned_locks: Dictionary = {}
 
@@ -48,6 +48,12 @@ static func positions_valid(value: Variant, limit: int) -> bool:
 static func valid(data: Variant) -> bool:
 	if not data is Dictionary or not integer(data.get("version"), 1, 3):
 		return false
+	if data.has("host_identity"):
+		if not data["host_identity"] is String or data["host_identity"].length() != 64:
+			return false
+		for character in data["host_identity"]:
+			if character not in "0123456789abcdef":
+				return false
 	if not integer(data.get("seed"), 1337, 1337) or not number(data.get("phase"), 0, 2700):
 		return false
 	var cut: Variant = data.get("cut")
@@ -117,6 +123,8 @@ static func valid(data: Variant) -> bool:
 				return false
 			if field == "drops" and (not record.get("id") is String or not Catalog.known(record["id"]) or not integer(record.get("count"), 1, 9999)):
 				return false
+			if field == "drops" and record.has("durability") and not integer(record["durability"], 0, 100):
+				return false
 	return data.get("weather") is Dictionary and WeatherModel.valid(data["weather"])
 
 static func migrate(data: Dictionary) -> Dictionary:
@@ -173,6 +181,28 @@ static func newest(folder: String) -> Dictionary:
 
 static func load_world(folder: String = "user://world") -> Dictionary:
 	return newest(folder).get("data", {}).duplicate(true)
+
+static func open_world(folder: String, allow_new: bool = false) -> Dictionary:
+	# Acquire before reading: another writer must not replace the snapshot we select.
+	var already_owned := owned_locks.has(lock_key(folder))
+	var error := acquire_lock(folder)
+	if not error.is_empty():
+		return {"data": {}, "error": error}
+	var data := load_world(folder)
+	if data.is_empty():
+		var has_slots := FileAccess.file_exists(folder.path_join("world.a.json")) or FileAccess.file_exists(folder.path_join("world.b.json"))
+		if has_slots or not allow_new:
+			if not already_owned:
+				release_lock(folder)
+			return {"data": {}, "error": "Nenhum snapshot válido; arquivos existentes foram preservados / No valid snapshot; existing files were preserved."}
+	return {"data": data, "error": ""}
+
+static func payload_fits(data: Dictionary) -> bool:
+	return JSON.stringify(data).to_utf8_buffer().size() <= MAX_BYTES / 2
+
+static func profile_room(data: Dictionary) -> bool:
+	# Reserve space for a new fully equipped player instead of admitting an unsavable profile.
+	return JSON.stringify(data).to_utf8_buffer().size() + 4096 <= MAX_BYTES / 2
 
 static func lock_key(folder: String) -> String:
 	return ProjectSettings.globalize_path(folder).simplify_path().trim_suffix("/")

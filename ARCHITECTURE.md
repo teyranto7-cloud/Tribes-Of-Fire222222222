@@ -1,4 +1,4 @@
-# Arquitetura — 0.3.0-dev
+# Arquitetura — 0.3.1-dev
 
 A implementação 0.1 foi materializada e preservada. `Main.gd` coordena entrada,
 ciclo de vida, autoridade, saves e replicação; `Game/Runtime.gd` integra os novos
@@ -35,7 +35,11 @@ relevância. Inventários ainda constam nos snapshots compartilhados, uma limita
 de privacidade que precisa ser removida antes de servidores públicos.
 
 O handshake vincula peer temporário a hash de token aleatório local persistido;
-reconexões recuperam o jogador, e identidade duplicada é recusada. Transporte e
+reconexões recuperam o jogador, e identidade duplicada é recusada. O metadado
+opcional `host_identity` vincula o hash do dono ao perfil histórico `1` ao migrar
+solo/hospedagem para dedicado. Enviar o hash público como token não autentica seu
+dono. Saves antigos sem vínculo precisam ser abertos e salvos pelo anfitrião
+original antes da transferência. Transporte e
 token não têm a segurança de autenticação comercial. Testar apenas em redes de
 confiança nesta fase. Senhas, Steam e criptografia são trabalho pendente.
 
@@ -49,7 +53,11 @@ administrado corretamente; não existe proteção contra alterações do relógi
 
 ## Tempo, chuva e sobrevivência
 
-Apenas a autoridade avança exposição e HP. `Exposure.advance` divide o tempo nos
+Apenas a autoridade avança exposição e HP. Relógio, clima, fome/sede e exposição
+usam o tempo monotônico real (`Time.get_ticks_usec`) para evitar que o limite de
+passos/delta do Godot atrase as regras em baixo FPS. Movimento/combate mantêm a
+física em passo fixo. Cobertura é consultada na posição atual; uma pausa longa
+não reconstrói movimentos ou mudanças de teto que o servidor não simulou. `Exposure.advance` divide o tempo nos
 limites de 40/55/70 s e integra eventos em ordem cronológica, inclusive ticks longos.
 A partir de 40 s de chuva sem teto, regeneração é suspensa. Primeiro dano em 55 s,
 1 HP a cada 15 s. Teto ou fim de chuva reinicia exposição; calor não reinicia.
@@ -76,12 +84,20 @@ microfones físicos continuam pendentes. Não é uma implementação Opus simula
 
 Snapshots alternados não são banco transacional/WAL. Um slot válido anterior
 permanece durante substituição do outro; checksum/schema recusam corrupção.
-Lock de diretório impede dois processos escritores. Crash deixa lock para
+Lock de diretório impede dois processos escritores. A abertura autoritativa
+obtém o lock antes de selecionar o snapshot; slots existentes inválidos causam
+recusa, sem gerar um mundo vazio. Envelope de até 16 MiB, payload de até 8 MiB,
+até 1.024 perfis históricos; admissão e mutações sociais reservam/verificam espaço
+antes de comprometer o estado. Registros expirados de proteção são eliminados e
+novas proteções nunca removem proteções ativas para abrir espaço. Crash deixa lock para
 recuperação explícita, sem apagar estado possivelmente ativo. Saves anteriores
 migram para v3. Não há garantia de fsync/durabilidade por queda de energia.
 
 `Tools/build.py` importa, testa, exporta três plataformas e grava hashes de fontes
-runtime/binários. `package.py` exige esse recibo, valida executáveis e ZIPs, inclui
+runtime/binários. A assinatura é congelada após importação, conferida antes e
+depois de cada etapa; uma falha invalida o recibo e não autoriza empacotamento. `package.py` exige esse recibo, valida executáveis e ZIPs, inclui
 licenças e cria manifesto SHA256. NSIS é per-user Unicode, com seis idiomas.
 Fonte Noto CJK é redistribuída sob SIL OFL, com licença incluída. Binário Windows
-compilado no Linux precisa de testes Windows reais antes de publicação.
+compilado no Linux é conferido pelo workflow nativo Windows após o push. Isso
+verifica instalação e runtime headless; renderização e áudio físicos precisam de
+validação em desktop real. Documentação vinculada acompanha ZIPs e instalação.

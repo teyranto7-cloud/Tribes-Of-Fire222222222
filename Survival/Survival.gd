@@ -68,15 +68,11 @@ func drink(amount: float = 35.0) -> bool:
 	return true
 
 func cook(inventory, near_fire: bool) -> bool:
-	if not near_fire or inventory.count("raw_meat") < 1 or not inventory.can_add("cooked_meat", 1):
+	if not near_fire:
 		return false
-	if not inventory.consume("raw_meat", 1):
-		return false
-	if not inventory.add("cooked_meat", 1):
-		# A supported inventory cannot fail after can_add without another mutation.
-		inventory.add("raw_meat", 1)
-		return false
-	return true
+	# Consuming the final raw-meat stack may provide the output slot. A failed
+	# output must restore all inputs, equipment and stack layout atomically.
+	return inventory.transact({"raw_meat": 1}, {"cooked_meat": 1})
 
 func state() -> Dictionary:
 	return {"hunger": hunger, "thirst": thirst, "starvation": starvation,

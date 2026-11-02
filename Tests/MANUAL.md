@@ -1,4 +1,4 @@
-# Validação manual — 0.3.0-dev
+# Validação manual — 0.3.1-dev
 
 Importação, regras, física automatizada, processo real de rede, captura/reprodução
 sintética e inspeção de sete telas renderizadas foram executados no Linux. Isso
@@ -51,3 +51,21 @@ limitações ficam em PROGRESS.md; marque abaixo somente após executar.
 - [ ] Medir Ryzen 4600G/16 GB/1080p e GPU dedicada: FPS, p95/p99, CPU/GPU, memória,
       noite/chuva/base e multiplayer; não usar resultado llvmpipe como referência.
 - [ ] Testes de carga, latência/perda e segurança antes de servidores públicos.
+
+## Regressões adicionais da 0.3.1
+
+Os casos automatizados de morte, desgaste, oclusão, cozinha cheia, remapeamento,
+LOD, configurações malformadas, shutdown, locks, corrupção, tribos e migração estão
+em test_*regressions.gd, test_tribes_regression.gd, test_reliability.gd,
+test_startup_close.gd, test_startup_processes.py e Tools/test_host_migration.py.
+Ainda conferir interativamente em uma cópia dos dados:
+
+- [ ] Remapear setas, jogar, reiniciar e restaurar padrões.
+- [ ] Descartar machado gasto, reiniciar e recuperar preservando desgaste.
+- [ ] Morrer durante esquiva/defesa; renascer e recuperar controles normais.
+- [ ] Fechar chat com inventário/menus abertos sem recuperar movimento indevido.
+- [ ] Abrir novo mundo após participar de grupos e confirmar estado vazio.
+- [ ] Derrubar conexão e voltar ao menu; iniciar solo e conectar novamente.
+- [ ] Migrar cópia de mundo hospedado para dedicado usando a identidade original.
+- [ ] Conferir voz sob carga, latência/perda e FPS baixos com dispositivos físicos.
+- [ ] Confirmar documentos/links em cada ZIP extraído e na instalação Windows.

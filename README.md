@@ -1,23 +1,24 @@
 # Tribes of Fire
 
-Criado por **felipealx** · **0.3.0-dev** · Godot 4.6.3 · Windows/Linux x64
+Criado por **felipealx** · **0.3.1-dev** · Godot 4.6.3 · Windows/Linux x64
 
 Jogo de sobrevivência 3D em desenvolvimento, continuado a partir da base 0.1.
 Inclui solo, hospedagem por jogador e servidor dedicado autoritativo. Esta entrega
-amplia a versão 0.2; ainda faltam requisitos obrigatórios para a versão 1.0.
+corrige a versão 0.3.0 após auditoria e testes de regressão; ainda faltam requisitos
+obrigatórios para a versão 1.0.
 Consulte [PROGRESS.md](PROGRESS.md) para resultados e limitações verificáveis.
 
 ## Download e código-fonte
 
-Pacotes **0.3.0-dev**, disponíveis neste repositório e sem necessidade do editor
+Pacotes **0.3.1-dev**, disponíveis neste repositório e sem necessidade do editor
 para jogar:
 
-- [Instalador Windows x64](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.0-dev/TribesOfFire-0.3.0-dev-Windows-Setup.exe)
-- [Windows ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.0-dev/TribesOfFire-0.3.0-dev-Windows.zip)
-- [Linux ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.0-dev/TribesOfFire-0.3.0-dev-Linux.zip)
-- [Servidor dedicado Linux ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.0-dev/TribesOfFire-0.3.0-dev-Server-Linux.zip)
-- [Fontes ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.0-dev/TribesOfFire-0.3.0-dev-Source.zip)
-- [Hashes SHA256](Downloads/0.3.0-dev/SHA256SUMS.txt)
+- [Instalador Windows x64](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Windows-Setup.exe)
+- [Windows ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Windows.zip)
+- [Linux ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Linux.zip)
+- [Servidor dedicado Linux ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Server-Linux.zip)
+- [Fontes ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Source.zip)
+- [Hashes SHA256](Downloads/0.3.1-dev/SHA256SUMS.txt)
 
 Para clonar o projeto completo:
 
@@ -28,18 +29,19 @@ cd Tribes-Of-Fire
 
 Para executar o código-fonte, instale o Godot 4.6.3 padrão, importe
 `project.godot` e pressione F5. Código, recursos, licenças, testes, presets e
-scripts de build acompanham o checkout. Os pacotes ficam em `Downloads/0.3.0-dev`;
+scripts de build acompanham o checkout. Os pacotes ficam em `Downloads/0.3.1-dev`;
 essa pasta é excluída dos exports e do ZIP de fontes para evitar incluir cópias
 dos pacotes dentro do próprio jogo.
 
 ## Jogar
 
-No Windows, execute `TribesOfFire-0.3.0-dev-Windows-Setup.exe`, ou extraia o ZIP
+No Windows, execute `TribesOfFire-0.3.1-dev-Windows-Setup.exe`, ou extraia o ZIP
 Windows e abra `TribesOfFire.exe`. O instalador oferece seis idiomas, atalho na
 área de trabalho marcado por padrão, menu Iniciar, execução ao terminar e
 instalação por usuário, sem privilégios de administrador. A desinstalação preserva
-os saves. O instalador foi compilado no Linux e passou por instalação, execução sem
-interface gráfica, saves e desinstalação em um runner Windows do GitHub.
+os saves. O instalador é compilado com NSIS e validado pelo workflow Windows
+associado ao commit publicado; consulte o resultado em Actions. A versão anterior
+0.3.0 passou por instalação, execução headless, saves e desinstalação nesse runner.
 **Renderização e uso interativo em Windows 10/11 continuam pendentes.** Existe um roteiro automatizado em
 [Tools/Test-Windows.ps1](Tools/Test-Windows.ps1) para uma conta Windows de teste.
 
@@ -154,6 +156,7 @@ A versão desta entrega foi validada com 4.6.3; versões anteriores precisam de 
     python3 Tools/test_network.py
     python3 Tools/test_multiplayer.py --keep-logs builds/logs
     python3 Tools/test_reconnect.py
+    python3 Tools/test_host_migration.py
     python3 Tools/test_communication.py --keep-logs builds/logs
     python3 Tools/build.py
     python3 Tools/test_exports.py --keep-logs builds/logs
@@ -178,6 +181,10 @@ Dados pessoais em `user://`: normalmente
 Mundo padrão na subpasta `world`; `--save-dir=...` escolhe outra pasta.
 Idioma, gráficos, controles, volumes e identidade ficam fora da instalação.
 Preserve `identity.cfg` e não o compartilhe; ele permite recuperar o jogador.
+Ao transferir um mundo solo/hospedado para um dedicado, salve primeiro com esta
+versão usando a identidade original. O save passa a vincular o perfil do anfitrião
+a esse cliente. Mundos antigos sem esse vínculo não entregam o perfil ao primeiro
+cliente que se conectar.
 Para dois clientes na mesma máquina Linux, use diretórios XDG_DATA_HOME distintos.
 
 Snapshots v3 alternados com SHA256, validação e migração v1/v2. Posições,
@@ -186,7 +193,9 @@ grupos e bloqueios são persistidos. Chamadas exigem novo aceite após reinício
 Salvamento manual, automático a cada 45 s e ao sair normalmente. Lock exclusivo
 impede escritores concorrentes. Após crash, pare todos os processos desse mundo,
 faça backup e só então remova `.writer-lock` para recuperação. Não remova um lock
-ativo. Ainda não há journal/WAL nem garantia contra perda por queda de energia.
+ativo. Se ambos os slots estiverem corrompidos, hospedar ou carregar recusa a
+operação sem substituí-los. Novas identidades são recusadas quando não há espaço
+para persistência, preservando os perfis existentes. Ainda não há journal/WAL nem garantia contra perda por queda de energia.
 
 Logs técnicos de inicialização e salvamento em `user://logs/`; não gravam conversas,
 áudio ou tokens. Arquitetura em [ARCHITECTURE.md](ARCHITECTURE.md), critérios e
@@ -207,6 +216,23 @@ Windows 10/11 em máquinas de jogadores ou desempenho. Esses testes continuam no
 roteiro manual. Para validar graficamente em uma conta Windows de teste, execute
 Tools/Test-Windows.ps1 sem a opção -Headless.
 
-Resultado observado: [primeira execução Windows aprovada](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41380465249).
+Evidência anterior, referente à **0.3.0-dev**: [primeira execução Windows aprovada](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41380465249).
 Esse resultado corresponde ao teste headless descrito acima, com os pacotes
 publicados; não certifica renderização nem o conjunto completo da versão 1.0.
+
+## Correções da 0.3.1-dev
+
+A revisão corrigiu movimento após morte, perda/reparo indevido de durabilidade ao
+descartar e recuperar equipamento, coleta através de paredes, cozimento com
+inventário cheio, preferências inválidas que impediam abrir o jogo, teclas
+consumidas pela interface, lacuna no LOD e encerramento durante carregamento.
+Também protege saves corrompidos, limita históricos de tribos/perfis, mantém o
+relógio e a exposição à chuva em tempo real mesmo sob poucos FPS e melhora o
+escoamento da fila de voz.
+
+Foram executadas **372 verificações** de regras, integração, regressão e processos,
+além de seis verificações dos binários Linux e cenários reais de rede, reconexão e
+migração solo → dedicado. A comunicação passou nas duas repetições finais; uma
+execução concorrente anterior falhou por entregas de áudio ausentes. Isso permanece
+registrado como limite da validação sob carga, sem prometer transporte de voz livre
+de perdas. Detalhes e limites em [Docs/TEST_REPORT.md](Docs/TEST_REPORT.md).

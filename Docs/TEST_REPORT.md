@@ -1,12 +1,13 @@
-# Relatório verificável — 0.3.0-dev
+# Relatório verificável — 0.3.1-dev
 
-Data UTC: 2026-11-02. Godot 4.6.3.stable.official.7d41c59c4, Linux x64.
-Execução real com saídas/artefatos, sem inferir Windows a partir de exportação.
+Validação em Linux x64, Godot 4.6.3.stable.official.7d41c59c4. Revisão de
+estabilidade da 0.3.0, preservando o jogo e os pacotes anteriores. Resultados
+abaixo são execuções reais; exportar Windows não é prova de execução Windows.
 
-## Regras e integração
+## Suíte final e binários
 
-`python3 Tools/build.py` importou, executou seis suítes GDScript e o teste de
-processos, e exportou Windows/Linux/dedicado. Saída final:
+`python3 Tools/build.py` importou e executou as doze suítes GDScript e três testes
+Python, depois exportou Windows x64, Linux x64 e dedicado Linux. Saída observada:
 
 ```
 RULES CHECKS=61 FAILED=0
@@ -15,108 +16,130 @@ PLAYER_CHECKS=11 FAILED=0
 INPUT CHECKS=8 FAILED=0
 GAMEPLAY CHECKS=17 FAILED=0
 V3 CHECKS=109 FAILED=0
+GAMEPLAY_REGRESSIONS CHECKS=25 FAILED=0
+TRIBES CHECKS=32 FAILED=0
+UI_REGRESSIONS CHECKS=33 FAILED=0
+VOICE_REGRESSION CHECKS=8 FAILED=0
+RELIABILITY CHECKS=21 FAILED=0
+STARTUP_CLOSE CHECKS=2 FAILED=0
 PERSISTENCE_PROCESS CHECKS=4 FAILED=0
+STARTUP_PROCESS CHECKS=7 FAILED=0
+BUILD_INTEGRITY CHECKS=9 FAILED=0
 ```
 
-Total: 235 verificações. Teste de chuva usa 15/30/60/144 FPS simulados, limites
-40/55/70/85/100/300 s, reinício por teto/fim da chuva e segurança da regeneração.
-Integração verifica slots/transações, alcance de estações, grupos/bloqueios,
-limites de aparência, fonte japonesa, captura sintética, caça/loot/cozimento,
-limite de dano animal, arco/munição e persistência real v3.
+Total: **372 verificações, zero falhas**. A execução final não registrou erros de
+script nem avisos de recursos em uso/vazamento. Os nove testes do recibo usam
+exports simulados para provocar alterações/falhas; os três exports de entrega
+foram gerados separadamente pelo Godot real na mesma execução do build.
+
+`python3 Tools/test_exports.py --keep-logs builds/verification/exports`:
+**EXPORT CHECKS=6 FAILED=0**. Binários Linux executados fora do editor: solo,
+dedicado e reinício; checksums, avanço do relógio, jogadores e locks conferidos.
+Total com exports: 378 asserções, além dos cenários de rede abaixo.
+
+O executável Linux também abriu com OpenGL 4.5 no Xorg virtual, iniciou jornada,
+salvou e encerrou normalmente. Renderizador Mesa llvmpipe, aviso esperado de VSync
+indisponível no display. Isso não certifica desempenho em GPU física.
+
+## Regressões reproduzidas e corrigidas
+
+- Corpo morto ainda aceitava movimento; intenção e movimento planar agora são
+  bloqueados e o respawn limpa estados transitórios.
+- Descartar e recuperar machado gasto restaurava sua durabilidade; metadado agora
+  acompanha bolsa, save/reload e pickup real. Reservas sobrevivem à quebra.
+- Mineração e saque aceitavam alvos através de paredes; raios verificam oclusão.
+- Cozinhar o último item com inventário cheio falhava mesmo liberando um espaço;
+  a transação considera o estado final.
+- Configuração `ui.language` como Dictionary interrompia `_ready`; preferências
+  inválidas recebem fallback, inclusive em startup real e modo seguro isolados.
+- Setas eram consumidas pela navegação GUI antes do remapeamento; o painel recebe
+  o evento na etapa correta. LOD personalizado deixava faixa invisível corrigida.
+- Fechamento durante carregamento deixava corrotina/recurso pendente; geração é
+  cancelada e finalizada antes de desligar. Teste verbose final sem vazamento.
+- Novo mundo/sessão mantinha apresentação antiga de grupos/chat; reset limpa
+  autoridade e UI. Desconexão limpa atores/comandos/canais e retorna ao menu.
+- Saídas solo repetidas produziam mais de 2.048 proteções e invalidavam o save;
+  teste de 3.000 ciclos e limites ativos passou com persistência.
+- Dois slots corrompidos podiam virar mundo vazio sobrescrito; abertura agora
+  obtém lock antes da leitura, recusa e preserva ambos os arquivos.
+- Save legal com 1.024 inventários cheios ultrapassava o limite anterior; envelope
+  de 16 MiB/payload de 8 MiB, admissão e mutações limitadas por orçamento. Gravação
+  e restauração reais de todos os perfis foram conferidas.
+- Identidade do antigo anfitrião não recuperava perfil `1` no dedicado; vínculo
+  opcional ao hash do proprietário e validação do token corrigem a migração.
+- A cinco FPS, o delta limitado pelo Godot atrasava relógio/exposição. O tempo
+  monotônico acompanha três segundos reais mesmo com limite de oito passos.
+- Reprodução de voz drenava um pacote por frame; agora usa capacidade disponível,
+  mantém fila limitada e limpa streams ao mutar/desativar. Fechar o teste local
+  encerra a ativação temporária. Testes usaram sinais sintéticos, sem microfone.
+- Recibo antigo podia autorizar mistura de fontes/binários; testes provocam drift
+  antes/depois das etapas e falhas, verificando recusa/remoção do recibo. Pacotes
+  incluem os documentos vinculados e hash externo sem referência circular.
 
 ## Rede em processos separados
 
-- `python3 Tools/test_network.py`: 1 servidor/2 clientes, snapshots autoritativos,
-  intenções válidas, comandos inválidos/administrativos recusados: NETWORK_PASS.
-- `python3 Tools/test_multiplayer.py --keep-logs builds/logs`: cena real do jogo,
-  dedicado/2 clientes, ambos moveram, viram corte compartilhado e 8 madeiras;
-  perfis salvos, saída sem erros: MULTIPLAYER_PASS.
-- `python3 Tools/test_reconnect.py`: novo peer, mesma identidade/inventário, parada
-  e reinício real do servidor, inventário 12 restaurado: RECONNECT_PASS.
-- `python3 Tools/test_communication.py --keep-logs builds/logs`: dedicado/3 clientes,
-  seis canais de texto, privacidade, bloqueio e áudio ADPCM por canal autorizado:
-  COMMUNICATION_PASS. B recebeu 6 pacotes de proximidade e 4 em cada canal
-  privado/grupo/tribo (11.520 amostras reproduzidas); C recebeu 4 diplomáticos
-  remotos (2.560 amostras), sem áudio privado indevido. Microfones físicos nunca
-  iniciados. Dano aliado e pós-saída bloqueado pelo Runtime real da autoridade.
+- `Tools/test_network.py`: servidor e dois clientes ENet; intenções válidas,
+  payloads inválidos e administração indevida recusados: **NETWORK_PASS**.
+- `Tools/test_multiplayer.py`: cena Main real, dedicado e dois clientes; movimento,
+  visibilidade de atores e corte/coleta compartilhados, saves e saída limpa:
+  **MULTIPLAYER_PASS** (8 madeiras observadas no estado compartilhado).
+- `Tools/test_reconnect.py`: nova identificação temporária ENet, mesma identidade
+  persistente, inventário de 12 madeiras após reconexão e reinício real:
+  **RECONNECT_PASS**.
+- `Tools/test_host_migration.py`: mundo solo real, save com vínculo do dono,
+  reinício como dedicado e cliente original via ENet; perfil `1`, 37 madeiras e
+  tribo preservados: **HOST_MIGRATION_PASS**.
+- `Tools/test_communication.py`: dedicado e três clientes, seis canais de texto,
+  bloqueio/privacidade, roteamento de áudio codificado, reprodução e recusa de
+  dano aliado/pós-saída: **COMMUNICATION_PASS** nas duas repetições finais.
+  B recebeu proximidade, privado, grupo e tribo; C somente diplomacia autorizada.
+  Nenhum teste iniciou microfone físico.
 
-Identidades e diretórios XDG isolados por processo. Limites de frequência, codec
-malformado e exclusão de terceiros são testados. Isso não constitui teste de
-100 jogadores, Internet hostil, perda/latência extensa ou usuários em máquinas distintas.
+Uma primeira execução de comunicação, concorrente ao build e outros cenários,
+**falhou** porque B não recebeu pacotes de proximidade/tribo. Texto e áudio
+privado/grupo funcionaram; o encerramento abrupto do fixture falho também mostrou
+recursos pendentes. Não foi comprovada a causa. Repetições posteriores passaram,
+mas não estabelecem estabilidade de voz sob carga, latência/perda extensa ou
+Internet hostil. O transporte de voz é não confiável e não garante cada pacote.
+Esses testes também não comprovam 100 jogadores ou segurança comercial.
 
-## Binários e empacotamento
+## Distribuição e Windows
 
-`python3 Tools/test_exports.py --keep-logs builds/logs` executou cliente Linux,
-dedicado e reinício sem editor: EXPORT CHECKS=6 FAILED=0. Conferiu avanço do
-relógio, saves, checksums, estado de jogadores e liberação do lock.
-O executável Linux também abriu com OpenGL no Xorg virtual, salvou e saiu com 0.
-VSync indisponível no display virtual foi registrado como aviso.
+ZIPs Windows/Linux/dedicado/fontes e instalador NSIS Unicode com seis idiomas são
+conferidos por CRC/SHA256, com manifesto em `Downloads/0.3.1-dev/`.
+A assinatura runtime do build validado é:
 
-NSIS 3.11 compilou instalador Unicode com seis tabelas de idioma. ZIPs têm teste
-CRC, headers dos binários são conferidos e SHA256 acompanha os artefatos.
-O workflow Windows foi publicado e a [execução aprovada](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41380465249)
-foi observada com status público passing. Tools/Test-Windows.ps1 executa em modo
-headless em windows-latest: instalação, atalhos, startup, SHA256/schema dos saves,
-reinício dedicado, preservação de jogadores/relógio/lock, reinstalação da mesma
-versão e desinstalação. Os relatórios detalhados estão no artefato da execução.
-Essa validação ocorreu depois da geração dos pacotes e não equivale a jogar em
-um Windows desktop com GPU e dispositivos físicos.
-**Windows 10/11 gráficos/interativos e microfones físicos: não executados.**
-A matriz manual completa está em Tests/MANUAL.md.
+`2d870fb77fae6583689ef5f658f43ae2694c358ccfdd47e2a65e7eba1307c5d3`
 
-Hash SHA256 das fontes runtime no recibo da exportação:
+O empacotador compara a assinatura e os três hashes dos executáveis com o recibo
+antes de gerar os arquivos. A fonte é congelada após importação e conferida em
+cada etapa de teste/exportação. Nenhum pacote reutiliza o executável 0.3.0.
 
-`4321bc9b4436d3c93dec46b06e8ecdc17ac9b5e71e9a94735713e77768a50434`
+Após o push, o workflow [Windows installer and runtime](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/workflows/windows-qa.yml)
+verifica os cinco hashes, documentação dos ZIPs, instalação/atalhos/documentos,
+execução headless, snapshots, reinício, reinstalação e desinstalação preservando
+saves em `windows-latest`. O resultado referente ao commit desta revisão deve ser
+consultado em Actions; este texto acompanha a geração anterior a essa execução.
+A [execução 41380465249](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41380465249)
+aprovada anteriormente pertence à **0.3.0-dev**.
 
-O empacotador compara esse hash e os três hashes de executáveis antes de criar
-pacotes. Alterar código exige nova exportação. Recibo completo em
-builds/build-receipt.json; manifesto final e SHA256 em dist/.
+Windows 10/11 gráficos/interativos, troca entre versões instaladas, microfones
+físicos, hardware de referência, Internet e 100 jogadores permanecem pendentes.
+Instalador sem assinatura digital pode apresentar aviso do Windows.
 
-## Medição gráfica curta
+## Medição gráfica anterior, sem novo benchmark de hardware
 
-AMD EPYC 9V74 80-Core Processor, llvmpipe (LLVM 19.1.7, 256 bits), 5 processadores visíveis, 1280 × 720, Compatibility.
-Nove cenários, 1 s de aquecimento e 4 s de amostragem, câmera fixa, sem limite FPS.
-Antes/depois da consolidação de árvores/depósitos por material:
+Na 0.3.0, nove amostras curtas a 1280 × 720 em llvmpipe/EPYC, câmera fixa, mostraram
+redução diurna de draw calls após consolidação: Muito Baixo 548 → 416, Médio
+1.934 → 1.302, Ultra 4.339 → 2.238. FPS posterior aproximado: 14,5–18,7 em Muito
+Baixo e 1,8–2,8 em Médio/Ultra; renderização por software insuficiente. As amostras
+não foram um comparativo controlado e não equivalem à GPU integrada 4600G.
+Não há novo resultado de FPS, tempo de GPU ou teste de 60 FPS nesta revisão.
 
-| Perfil / cena | Draw calls antes → depois | FPS antes → depois | p95 depois (ms) | Frames depois |
-|---|---:|---:|---:|---:|
-| Very Low / day | 548 → 416 | 14.48 → 14.55 | 113.5 | 59 |
-| Very Low / night | 550 → 418 | 16.06 → 18.69 | 63.6 | 75 |
-| Very Low / storm | 529 → 397 | 16.26 → 18.23 | 67.3 | 73 |
-| Medium / day | 1934 → 1302 | 2.40 → 2.21 | 493.6 | 9 |
-| Medium / night | 1810 → 1224 | 2.68 → 2.43 | 462.6 | 10 |
-| Medium / storm | 1935 → 1303 | 2.46 → 2.76 | 380.7 | 12 |
-| Ultra / day | 4339 → 2238 | 1.95 → 1.82 | 598.1 | 8 |
-| Ultra / night | 3805 → 2052 | 2.04 → 2.04 | 528.0 | 9 |
-| Ultra / storm | 4441 → 2334 | 1.97 → 1.96 | 573.4 | 8 |
+## Reprodução e limites
 
-São amostras curtas, com poucos frames nos perfis pesados e interferência parcial
-de build na segunda rodada. Demonstram redução de submissões de geometria, sem
-provar ganho controlado de FPS. O renderizador é software llvmpipe; os valores
-não representam GPU integrada ou dedicada. A meta de 60 FPS no 4600G não foi
-atingida/comprovada. Tempo de GPU indisponível; campo null nos JSONs.
-Memória estática Godot não é RSS total nem certificação de ausência de vazamento.
-
-Reproduza com display gráfico: `godot --path . --script res://Tools/benchmark.gd`.
-Headless é recusado para evitar tratar FPS sem renderização como benchmark.
-Dados brutos em builds/reports/benchmark-before-batching.json e benchmark.json.
-
-## Evidências e falhas corrigidas
-
-Logs desta versão: builds/logs/test_*.gd.log, persistence-process.log,
-v3-network.log, v3-multiplayer.log, v3-reconnect.log, communication-*.log,
-export-*.log e *-export.log. Telas em builds/screenshots/v3/.
-
-Uma execução de integração falhou por inferência de tipo no teste; corrigida.
-Um smoke de rede falhou por término precoce de cliente no fixture; corrigido para
-manter os dois durante a verificação. A importação inicial sem sockets/cache
-adequados falhou no sandbox; repetição autorizada e configurada passou. Falhas
-não foram convertidas em sucesso por código de saída 0 sem examinar logs.
-
-Preview gráfico deixou de gravar antes do aceite; NUL em mensagens foi corrigido;
-slots após crafting e durabilidade de ferramenta substituta foram corrigidos;
-preferências privadas não entram nos snapshots públicos; seleção de modo ranged
-foi validada por consumo de flecha e dano em alvo real.
-
-Esta entrega permanece **0.3.0-dev**. Docs/AUDIT.md lista os requisitos ausentes
-que bloqueiam 1.0. Não houve publicação Steam ou teste comercial certificado.
+Logs locais em `builds/logs/` e `builds/verification/`; scripts/fixtures no checkout
+permitem repetir os casos. Build/export/NSIS exigem ferramentas descritas no
+README. Instalação/QA Windows exige conta de teste limpa. A matriz interativa está
+em `Tests/MANUAL.md`; requisitos ainda ausentes estão em `Docs/AUDIT.md`.
+Esta entrega é **0.3.1-dev**, sem certificação 1.0 ou publicação Steam.

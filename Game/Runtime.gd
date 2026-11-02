@@ -10,6 +10,7 @@ const Workshop = preload("res://Building/Workshop.gd")
 const Combat = preload("res://Combat/Rules.gd")
 const Wildlife = preload("res://Animals/Director.gd")
 const Audio = preload("res://Audio/Manager.gd")
+const Store = preload("res://Persistence/Store.gd")
 var game
 var tribes = Tribes.new()
 var channels = Channels.new()
@@ -102,7 +103,7 @@ func save_state() -> Dictionary:
 		records.append({"kind": station.kind, "position": [station.position.x, station.position.y, station.position.z], "owner": station.owner_key})
 	var dropped: Array = []
 	for drop in drops:
-		dropped.append({"id": drop.get_meta("id"), "count": drop.get_meta("count"), "position": [drop.position.x, drop.position.y, drop.position.z]})
+		dropped.append({"id": drop.get_meta("id"), "count": drop.get_meta("count"), "durability": drop.get_meta("durability", 100), "position": [drop.position.x, drop.position.y, drop.position.z]})
 	return {"tribes": tribes.state(), "communication": channels.state(), "mining": mining.capture(), "workshops": records, "drops": dropped, "animals": wildlife.capture()}
 func restore(data: Dictionary) -> void:
 	tribes = Tribes.new()
@@ -150,12 +151,13 @@ func _restore_drops(records: Array) -> void:
 	drops.clear()
 	for record in records:
 		var p: Array = record["position"]
-		_add_drop(record["id"], int(record["count"]), Vector3(p[0], p[1], p[2]))
-func _add_drop(item: String, count: int, at: Vector3) -> void:
+		_add_drop(record["id"], int(record["count"]), Vector3(p[0], p[1], p[2]), int(record.get("durability", 100)))
+func _add_drop(item: String, count: int, at: Vector3, wear: int = 100) -> void:
 	var drop := Node3D.new()
 	drop.position = at
 	drop.set_meta("id", item)
 	drop.set_meta("count", count)
+	drop.set_meta("durability", clampi(wear, 0, 100))
 	game.world.add_child(drop)
 	var bag = preload("res://World/Shapes.gd").sphere(drop, 0.18, Vector3.UP * 0.2, Color("#b39761"))
 	bag.scale.y = 1.3
@@ -174,8 +176,16 @@ func tick(delta: float) -> void:
 		combat.tick(delta)
 		for id in needs:
 			if game.players.has(id) and not game.players[id].creation_pending:
-				needs[id].advance(delta, game.players[id].vitals)
 				game.players[id].set_equipment(game.inventories[id].equipment)
+
+func reset_local_communication() -> void:
+	channel_state = {"groups": {}, "calls": {}, "invitation": {}, "blocked": []}
+	messages.clear()
+	message_counter = 0
+	channels = Channels.new()
+	tribes = Tribes.new()
+	if voice != null:
+		voice.stop()
 func safe(id: int) -> bool:
 	return needs.has(id) and needs[id].is_safe() and game.players[id].attack_time <= 0 and not game.players[id].blocking and game.players[id].dodging <= 0
 func command(id: int, action: String, data: Dictionary) -> void:
@@ -200,10 +210,22 @@ func command(id: int, action: String, data: Dictionary) -> void:
 	elif action.begins_with("tribe_"):
 		if action in ["tribe_invite", "tribe_kick", "tribe_leader"] and peer(str(data.get("target", ""))) == 0:
 			return
+		var before := tribes.state()
 		accepted = tribes.command(identity, action, data)
+		if accepted and not Store.payload_fits(game.snapshot()):
+			tribes.restore(before)
+			accepted = false
 		publish_channels()
 	elif action.begins_with("group_") or action.begins_with("call_") or action == "block":
+		var before := channels.state()
+		var before_calls: Dictionary = channels.calls.duplicate(true)
+		var before_invites: Dictionary = channels.invitations.duplicate(true)
 		accepted = channels.command(identity, action, data, positions().keys(), tribes)
+		if accepted and not Store.payload_fits(game.snapshot()):
+			channels.restore(before)
+			channels.calls = before_calls
+			channels.invitations = before_invites
+			accepted = false
 		publish_channels()
 	elif action == "chat":
 		var text := str(data.get("text", "")).strip_edges()
@@ -261,7 +283,9 @@ func command(id: int, action: String, data: Dictionary) -> void:
 				for drop in drops:
 					if accepted: break
 					if drop.position.distance_to(body.position) < 2.5:
-						if inv.add(str(drop.get_meta("id")), int(drop.get_meta("count"))):
+						if not _clear_interaction(body, drop.position + Vector3.UP * 0.2):
+							continue
+						if inv.add(str(drop.get_meta("id")), int(drop.get_meta("count")), int(drop.get_meta("durability", 100))):
 							drops.erase(drop)
 							drop.queue_free()
 							accepted = true
@@ -278,7 +302,7 @@ func command(id: int, action: String, data: Dictionary) -> void:
 					if not taken.is_empty():
 						var at: Vector3 = body.position - body.global_basis.z
 						at.y = game.world.height_at(at.x, at.z) + 0.1
-						_add_drop(taken["id"], taken["count"], at)
+						_add_drop(taken["id"], taken["count"], at, int(taken.get("durability", 100)))
 						accepted = true
 			"mine": accepted = mining.mine(body, inv, mining.closest(body, 3, true))
 			"build":
@@ -295,6 +319,10 @@ func command(id: int, action: String, data: Dictionary) -> void:
 	_notify(id, accepted)
 func _notify(id: int, accepted: bool) -> void:
 	game.session.notify(id, "notice", {"key": "Action completed" if accepted else "Action unavailable"})
+
+func _clear_interaction(body, at: Vector3) -> bool:
+	var query := PhysicsRayQueryParameters3D.create(body.global_position + Vector3.UP, at, 1, [body.get_rid()])
+	return game.world.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 func publish_channels() -> void:
 	for id in game.players:
 		game.session.notify(id, "channels", channels.public_state(key(id)))

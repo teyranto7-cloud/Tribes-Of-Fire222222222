@@ -19,18 +19,31 @@ jobs:
     steps:
       - name: Check out project and packaged game
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Verify packaged installer checksum
+      - name: Verify all packaged checksums and ZIP documentation
         shell: pwsh
         run: |
-          $manifest = Get-Content -Raw 'Downloads/0.3.0-dev/manifest.json' | ConvertFrom-Json
-          $artifact = @($manifest.artifacts | Where-Object { $_.name -eq 'TribesOfFire-0.3.0-dev-Windows-Setup.exe' })
+          $manifest = Get-Content -Raw 'Downloads/0.3.1-dev/manifest.json' | ConvertFrom-Json
+          if (@($manifest.artifacts).Count -ne 5) { throw 'Expected five distribution artifacts.' }
+          foreach ($item in $manifest.artifacts) {
+            $path = Join-Path 'Downloads/0.3.1-dev' $item.name
+            if ((Get-Item $path).Length -ne $item.size -or (Get-FileHash -Algorithm SHA256 $path).Hash.ToLowerInvariant() -ne $item.sha256) { throw "Artifact mismatch: $path" }
+            if ($item.name.EndsWith('.zip')) {
+              $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $path))
+              try {
+                foreach ($doc in @('README.md', 'Docs/COMMUNICATION.md', 'Tests/MANUAL.md', 'Tools/Test-Windows.ps1')) {
+                  if (@($zip.Entries | Where-Object { $_.FullName.EndsWith('/' + $doc) }).Count -ne 1) { throw "Missing ZIP documentation: $doc" }
+                }
+              } finally { $zip.Dispose() }
+            }
+          }
+          $artifact = @($manifest.artifacts | Where-Object { $_.name -eq 'TribesOfFire-0.3.1-dev-Windows-Setup.exe' })
           if ($artifact.Count -ne 1) { throw 'Installer missing from manifest.' }
-          $file = Join-Path 'Downloads/0.3.0-dev' $artifact[0].name
+          $file = Join-Path 'Downloads/0.3.1-dev' $artifact[0].name
           if ((Get-FileHash -Algorithm SHA256 $file).Hash.ToLowerInvariant() -ne $artifact[0].sha256) { throw 'Installer checksum mismatch.' }
       - name: Install, run headless, restore, reinstall and uninstall on Windows
         shell: pwsh
         run: |
-          ./Tools/Test-Windows.ps1 -Installer 'Downloads/0.3.0-dev/TribesOfFire-0.3.0-dev-Windows-Setup.exe' -OutputDirectory (Join-Path $env:RUNNER_TEMP 'Tribes-QA') -Headless
+          ./Tools/Test-Windows.ps1 -Installer 'Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Windows-Setup.exe' -OutputDirectory (Join-Path $env:RUNNER_TEMP 'Tribes-QA') -Headless
       - name: Publish native Windows test evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

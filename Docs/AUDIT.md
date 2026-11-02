@@ -1,4 +1,4 @@
-# Auditoria de escopo — 0.3.0-dev
+# Auditoria de escopo — 0.3.1-dev
 
 Requisitos de origem preservados em REQUEST_V2.md, REQUEST_COMMUNICATION.md,
 REQUEST_CHARACTERS.md e REQUEST_AUDIT_FINAL.md. O último prompt permite uma versão
@@ -39,4 +39,4 @@ Steam, alianças ou outras funções ausentes para simular conclusão.
 Antes de 1.0: concluir as dependências da tabela, validar Windows 10 e 11 e Linux
 em máquinas reais, medir hardware de referência, testar voz física e rede com
 latência/perda, reforçar identidade/transporte/persistência e executar testes de
-carga. Os executáveis atuais têm versão 0.3.0-dev. Exportar não certifica essas metas.
+carga. Os executáveis atuais têm versão 0.3.1-dev. Exportar não certifica essas metas.

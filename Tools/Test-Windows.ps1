@@ -56,7 +56,7 @@ function Read-WorldSnapshot([string]$Directory) {
     $Candidates = @()
     foreach ($File in @(Get-ChildItem -LiteralPath $Directory -Filter 'world.*.json')) {
         if ($File.Name -notmatch '^world\.[ab]\.json$') { continue }
-        if ($File.Length -gt 2097152) { throw 'Snapshot exceeds its size limit.' }
+        if ($File.Length -gt 16777216) { throw 'Snapshot exceeds its size limit.' }
         $Envelope = Get-Content -LiteralPath $File.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
         if (-not (Number-InRange $Envelope.sequence 1 1000000000 $true) -or $Envelope.payload -isnot [string] -or $Envelope.digest -isnot [string]) { throw 'Invalid snapshot envelope.' }
         $Hasher = [Security.Cryptography.SHA256]::Create()
@@ -101,6 +101,8 @@ try {
     Check ($Process.ExitCode -eq 0) 'Installer exits successfully'
     $Executable = Join-Path $InstallDirectory 'TribesOfFire.exe'
     Check (Test-Path $Executable) 'Game executable installed'
+    $RequiredDocs = @('README.md', 'ARCHITECTURE.md', 'PROGRESS.md', 'CREDITS.md', 'Docs/COMMUNICATION.md', 'Docs/AUDIT.md', 'Docs/TEST_REPORT.md', 'Tests/MANUAL.md', 'Tools/Test-Windows.ps1')
+    Check (@($RequiredDocs | Where-Object { -not (Test-Path (Join-Path $InstallDirectory $_)) }).Count -eq 0) 'All linked documentation installed'
     Check (Test-Path $ShortcutPath) 'Desktop shortcut created by default'
     $Shell = New-Object -ComObject WScript.Shell
     $Shortcut = $Shell.CreateShortcut($ShortcutPath)

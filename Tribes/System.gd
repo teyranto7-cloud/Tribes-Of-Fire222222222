@@ -1,5 +1,8 @@
 extends RefCounted
 ## All mutations run on the authority. Protection uses stable identities and UTC expiry.
+const MAX_MEMBERS := 100
+const MAX_PROTECTIONS := 2048
+const PROTECTION_SECONDS := 300.0
 var tribes: Dictionary = {}
 var invitations: Dictionary = {}
 var protections: Array = []
@@ -13,6 +16,10 @@ func tribe_of(key: String) -> String:
 func command(actor: String, action: String, data: Dictionary, now: float = -1.0) -> bool:
 	if now < 0:
 		now = Time.get_unix_time_from_system()
+	if not is_finite(now):
+		return false
+	# Capacity checks must see only live protection; stale entries never block leaving.
+	protections = protections.filter(func(p): return float(p["until"]) > now)
 	var id := tribe_of(actor)
 	var target := str(data.get("target", ""))
 	match action:
@@ -30,7 +37,7 @@ func command(actor: String, action: String, data: Dictionary, now: float = -1.0)
 			var invite: Dictionary = invitations.get(actor, {})
 			if id != "" or invite.is_empty() or float(invite["until"]) < now or not tribes.has(invite["tribe"]):
 				return false
-			if tribes[invite["tribe"]]["members"].size() >= 100:
+			if tribes[invite["tribe"]]["members"].size() >= MAX_MEMBERS:
 				return false
 			tribes[invite["tribe"]]["members"].append(actor)
 			invitations.erase(actor)
@@ -38,7 +45,17 @@ func command(actor: String, action: String, data: Dictionary, now: float = -1.0)
 			var departing := actor if action == "tribe_leave" else target
 			if id == "" or (action == "tribe_kick" and (tribes[id]["leader"] != actor or target == actor or not target in tribes[id]["members"])):
 				return false
-			protections.append({"person": departing, "tribe": id, "members": tribes[id]["members"].duplicate(), "until": now + 300})
+			var former_members: Array = tribes[id]["members"].duplicate()
+			former_members.erase(departing)
+			if not former_members.is_empty():
+				var existing := _equivalent_protection(departing, id, former_members)
+				if existing < 0 and protections.size() >= MAX_PROTECTIONS:
+					# Refuse before changing membership or dropping any live protection.
+					return false
+				if existing >= 0:
+					protections[existing]["until"] = maxf(float(protections[existing]["until"]), now + PROTECTION_SECONDS)
+				else:
+					protections.append({"person": departing, "tribe": id, "members": former_members, "until": now + PROTECTION_SECONDS})
 			tribes[id]["members"].erase(departing)
 			if tribes[id]["members"].is_empty():
 				tribes.erase(id)
@@ -50,8 +67,25 @@ func command(actor: String, action: String, data: Dictionary, now: float = -1.0)
 			tribes[id]["leader"] = target
 		_:
 			return false
-	protections = protections.filter(func(p): return float(p["until"]) > now)
 	return true
+
+func _equivalent_protection(person: String, tribe: String, members: Array) -> int:
+	for index in range(protections.size()):
+		var existing: Dictionary = protections[index]
+		if existing["person"] != person or existing["tribe"] != tribe:
+			continue
+		# Legacy v3 records also stored the departing player in this array.
+		var previous: Array = existing["members"].filter(func(member): return member != person)
+		if previous.size() != members.size():
+			continue
+		var equivalent := true
+		for member in members:
+			if not member in previous:
+				equivalent = false
+				break
+		if equivalent:
+			return index
+	return -1
 
 func can_damage(a: String, b: String, now: float = -1.0) -> bool:
 	if a == b:
@@ -82,17 +116,17 @@ func restore(data: Dictionary) -> void:
 		protections = data["protections"].duplicate(true)
 
 static func valid_state(data: Dictionary) -> bool:
-	if not data.get("tribes") is Dictionary or data["tribes"].size() > 64 or not data.get("invitations") is Dictionary or data["invitations"].size() > 1024 or not data.get("protections") is Array or data["protections"].size() > 2048:
+	if not data.get("tribes") is Dictionary or data["tribes"].size() > 64 or not data.get("invitations") is Dictionary or data["invitations"].size() > 1024 or not data.get("protections") is Array or data["protections"].size() > MAX_PROTECTIONS:
 		return false
 	for id in data["tribes"]:
 		var t: Variant = data["tribes"][id]
-		if not id is String or not t is Dictionary or not t.get("name") is String or t["name"].length() > 32 or not t.get("members") is Array or t["members"].size() > 100 or not t.get("leader") in t["members"]:
+		if not id is String or not t is Dictionary or not t.get("name") is String or t["name"].length() > 32 or not t.get("members") is Array or t["members"].size() > MAX_MEMBERS or not t.get("leader") in t["members"]:
 			return false
 		for member in t["members"]:
 			if not member is String or member.length() > 128:
 				return false
 	for p in data["protections"]:
-		if not p is Dictionary or not p.get("person") is String or not p.get("tribe") is String or not p.get("members") is Array or p["members"].size() > 100 or not (p.get("until") is float or p.get("until") is int) or not is_finite(float(p["until"])):
+		if not p is Dictionary or not p.get("person") is String or not p.get("tribe") is String or not p.get("members") is Array or p["members"].size() > MAX_MEMBERS or not (p.get("until") is float or p.get("until") is int) or not is_finite(float(p["until"])):
 			return false
 	for key in data["invitations"]:
 		var invite: Variant = data["invitations"][key]

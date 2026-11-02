@@ -2,6 +2,7 @@ extends VBoxContainer
 var game
 var target: String = ""
 var group: String = ""
+var _test_auto_enabled: bool = false
 func configure(value, _language: int = 0) -> void:
 	game = value
 	build()
@@ -11,11 +12,12 @@ func label_text(value: String) -> Label:
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(label)
 	return label
-func button(value: String, callback: Callable) -> void:
+func button(value: String, callback: Callable) -> Button:
 	var b := Button.new()
 	b.text = tr(value)
 	b.pressed.connect(callback)
 	add_child(b)
+	return b
 func line(title: String, default_text: String = "") -> LineEdit:
 	label_text(title)
 	var field := LineEdit.new()
@@ -109,7 +111,10 @@ func _voice_settings() -> void:
 	var enabled := CheckBox.new()
 	enabled.text = tr("Enable microphone")
 	enabled.button_pressed = voice.enabled
-	enabled.toggled.connect(voice.set_enabled)
+	enabled.toggled.connect(func(v):
+		# Explicit user activation supersedes the temporary test-only activation.
+		_test_auto_enabled = false
+		voice.set_enabled(v))
 	add_child(enabled)
 	var mode := OptionButton.new()
 	mode.add_item(tr("Push to talk") + " [V]")
@@ -156,15 +161,34 @@ func _voice_settings() -> void:
 			else: voice.threshold = v
 			voice.save_settings())
 		add_child(slider)
-	button("Stop test" if voice.testing else "Test microphone", func():
-		var testing: bool = not voice.testing
-		if testing and not voice.enabled:
-			voice.set_enabled(true)
-		voice.testing = testing and voice.enabled
-		build())
+	var test_button := button("Stop test" if voice.testing else "Test microphone", _toggle_test)
+	test_button.name = "MicrophoneTest"
 	var status := label_text("")
 	status.name = "VoiceStatus"
+func _toggle_test() -> void:
+	var voice = game.runtime.voice
+	if voice.testing:
+		_finish_test()
+	else:
+		_test_auto_enabled = not voice.enabled
+		if _test_auto_enabled:
+			voice.set_enabled(true)
+		voice.testing = voice.enabled
+	build()
+func _finish_test() -> void:
+	if not is_instance_valid(game) or not is_instance_valid(game.runtime) or not is_instance_valid(game.runtime.voice):
+		return
+	if game.runtime.voice.testing or game.runtime.voice.receivers.has(-1):
+		game.runtime.voice.stop_test()
+	if _test_auto_enabled:
+		game.runtime.voice.set_enabled(false)
+	_test_auto_enabled = false
+func _exit_tree() -> void:
+	_finish_test()
 func _process(_delta: float) -> void:
+	var test_button := get_node_or_null("MicrophoneTest") as Button
+	if test_button != null:
+		test_button.text = tr("Stop test" if game.runtime.voice.testing else "Test microphone")
 	var status := get_node_or_null("VoiceStatus") as Label
 	if status != null:
 		var voice = game.runtime.voice

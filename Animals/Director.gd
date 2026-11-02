@@ -133,9 +133,14 @@ func restore(data: Array, authoritative: bool = true) -> void:
 func hit(animal, amount: int) -> bool:
 	return authority and animal in animals and animal.receive_damage(amount)
 func harvest(body, inventory) -> bool:
-	if not authority: return false
+	if not authority or body.vitals.hp <= 0: return false
 	for animal in animals:
 		if animal.hp <= 0 and not animal.harvested and body.position.distance_to(animal.position) < 3:
+			var query := PhysicsRayQueryParameters3D.create(body.global_position + Vector3.UP,
+				animal.global_position + Vector3.UP * 0.6, 1)
+			query.exclude = [body.get_rid(), animal.get_rid()]
+			if not get_world_3d().direct_space_state.intersect_ray(query).is_empty():
+				continue
 			if inventory.add_many(Animal.SPECIES[animal.species]["loot"]):
 				animal.harvested = true
 				animal.hide()

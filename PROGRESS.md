@@ -1,7 +1,7 @@
-# Progresso — 0.3.0-dev
+# Progresso — 0.3.1-dev
 
 Criado por **felipealx**. Validação em 2 de novembro de 2026 (UTC), Linux x64,
-Godot **4.6.3.stable.official.7d41c59c4**. Incremento real sobre 0.2.0-dev;
+Godot **4.6.3.stable.official.7d41c59c4**. Correções reais sobre 0.3.0-dev;
 os critérios obrigatórios de 1.0 continuam incompletos.
 
 ## Implementado e integrado
@@ -49,55 +49,65 @@ os critérios obrigatórios de 1.0 continuam incompletos.
   lançamento final, ícone, instalação por usuário e desinstalação preservando dados.
   Script PowerShell de QA para conta Windows limpa e modo seguro no pacote Windows.
 
-## Evidências reproduzíveis
+## Auditoria e estabilização da 0.3.1-dev
 
-| Verificação | Resultado nesta versão |
+- Corrigidos movimento/intenção após morte e estado transitório no respawn.
+- Durabilidade acompanha bolsas descartadas, persistência e recuperação; uma
+  ferramenta quebrada não destrói a reserva nem a restaura através do descarte.
+- Mineração, saque de cadáver e bolsas respeitam oclusão física; cozimento usa
+  transação que permite liberar o último espaço ocupado pela carne crua.
+- Preferências malformadas recebem valores válidos; modo seguro foi testado em
+  processo real e a janela pode fechar durante a geração sem vazar recursos.
+- Setas remapeadas chegam ao painel antes da navegação GUI; LOD não deixa uma
+  faixa vazia com distância personalizada; chat/grupos/voz limpam estado ao trocar
+  de sessão e desconexão retorna ao menu com estado local coerente.
+- Relógio/clima/exposição passam a usar tempo monotônico; teste a cinco FPS com
+  limite de oito passos comprova acompanhamento do tempo real.
+- Lock adquirido antes de carregar; ambos os slots corrompidos são preservados e
+  recusados. Save grande com 1.024 perfis cheios realmente gravado e restaurado.
+  Admissão respeita limite de perfis e orçamento de payload antes de inserir dados.
+- Proteções tribais expiradas são podadas, saídas solo não criam histórico inútil,
+  duplicatas equivalentes são consolidadas; limite cheio recusa mutação atomicamente.
+- Migração solo → dedicado vincula o anfitrião à identidade original, preservando
+  inventário e tribo. O teste real restaurou 37 madeiras e perfil `1` por ENet.
+- Voz escoa vários pacotes por frame, limita backlog de captura e limpa reprodução
+  ao desativar/mutar. Teste de microfone termina ao fechar o painel, sem manter
+  ativação temporária. Nenhum teste iniciou microfone físico.
+- Recibo de build congela as fontes após importação e detecta alterações em cada
+  etapa; falha invalida recibo antigo. ZIPs e NSIS incluem documentação vinculada.
+
+## Evidências reproduzíveis desta revisão
+
+| Verificação | Resultado |
 |---|---|
-| Importação e parser da aplicação | Sem erros |
-| Regras de inventário, vida, relógio, clima, chuva e persistência | 61 verificações, 0 falhas |
-| Mundo/colisões/teto/qualidade/LOD/consolidação | 25 verificações, 0 falhas |
-| Player/física/intenção/ataque/snapshots | 11 verificações, 0 falhas |
-| Input → Main → Session → player/câmera/inventário | 8 verificações, 0 falhas |
-| Gameplay integrado anterior | 17 verificações, 0 falhas |
-| Novos módulos/UI/tribos/voz/aparência/fauna/arco/save | 109 verificações, 0 falhas |
-| Escritor concorrente/SIGKILL/recusa/recuperação/liberação do lock | 4 verificações, 0 falhas |
-| ENet isolado: 1 servidor/2 clientes, payload e admin indevidos | Passou |
-| Jogo real: dedicado/2 clientes, movimento e coleta compartilhada | Passou; ambos confirmaram estado, 8 madeiras observadas |
-| Reconexão com novo peer e reinício real do servidor | Passou; inventário e identidade restaurados |
-| Comunicação: dedicado/3 clientes, seis canais e áudio codificado | Passou; áudio entregue/reproduzido apenas nos participantes permitidos |
-| PvP na cena real da comunicação | Dano aliado e pós-saída recusados, sem dano aplicado |
-| Captura sintética pelo mixer → codec → reprodução | Passou; nenhum microfone físico iniciado |
-| Windows x64 / Linux x64 / dedicado Linux | Três executáveis exportados sem erros |
-| Linux exportado fora do editor: solo/dedicado/reinício | 6 verificações, 0 falhas; snapshots/checksums/locks conferidos |
-| Linux exportado com OpenGL | Renderizou, iniciou jornada, salvou e saiu com código 0; aviso de VSync do display virtual |
-| ZIPs / instalador NSIS | Gerados; NSIS Unicode com seis tabelas de idioma, ZIPs verificados e hashes em dist/ |
-| Instalação e runtime headless Windows em CI | Workflow aprovado; atalho, saves, restart, reinstalação e uninstall |
-| Windows 10/11 gráficos, interativos e hardware real | **Não executados** |
-| Voz com microfones/fones físicos | **Não executada**; testes usaram sinal sintético |
-| 60 FPS no 4600G / 100 jogadores | **Não comprovados** |
+| Importação e parser | Sem erros |
+| Seis suítes anteriores (regras/mundo/player/input/gameplay/v3) | 231 verificações, 0 falhas |
+| Regressões gameplay / tribos / UI / voz / confiabilidade / fechar carregamento | 25 + 32 + 33 + 8 + 21 + 2 = 121 verificações, 0 falhas |
+| Processos: persistência / inicialização / integridade do build | 4 + 7 + 9 = 20 verificações, 0 falhas |
+| Total no build final | **372 verificações, 0 falhas** |
+| Exportação Windows/Linux/dedicado | Três executáveis gerados sem erros |
+| Linux exportado: solo/dedicado/reinício | 6 verificações, 0 falhas |
+| Executável Linux OpenGL em display virtual | Abriu, salvou e saiu; llvmpipe, aviso de VSync indisponível |
+| ENet isolado / jogo real com dois clientes | Passou; coleta e estado compartilhados |
+| Reconexão / reinício / migração solo → dedicado | Passou; inventário, identidade e tribo preservados |
+| Comunicação com três clientes | Passou nas duas repetições finais; ver ocorrência anterior abaixo |
+| Windows nativo desta revisão | Resultado do workflow associado ao commit publicado em Actions |
+| Windows 10/11 gráficos, microfone físico, 4600G e 100 jogadores | **Não validados** |
 
-As seis suítes GDScript somam **231 verificações**; processos acrescentam quatro
-(total **235**). Os testes de executáveis acrescentam seis (total **241**), além
-dos cenários multiprocesso com marcadores próprios. Não contar cada pacote como
-um teste separado. Logs finais ficam em builds/logs/ e evidências em Docs/TEST_REPORT.md.
+Registros detalhados em [Docs/TEST_REPORT.md](Docs/TEST_REPORT.md). As seis
+verificações dos exports acrescentam-se às 372 (378), sem contar marcadores de
+cenários multiprocesso como se fossem asserções individuais.
 
-## Falhas encontradas e corrigidas
+Uma execução de comunicação simultânea a build e outros cenários falhou: B não
+recebeu voz de proximidade/tribo; canais privado/grupo e mensagens funcionaram.
+Houve também aviso de recursos no encerramento abrupto do fixture que falhou.
+Duas repetições posteriores passaram com saída limpa. Não foi provada a causa
+nem estabilidade de voz sob carga; essa limitação permanece explícita.
 
-Durante integração: inferência GDScript em testes, validação NUL de texto que
-rejeitava mensagens válidas, layout de pilhas após crafting, preview de resolução
-salvo antes da confirmação, ataque principal do arco que não selecionava modo
-ranged e envio público das preferências privadas de comunicação e durabilidade de ferramenta substituta. A tradução de nomes compostos de
-itens/controles também foi ajustada às chaves dos catálogos. Foram corrigidos
-e os testes correspondentes passaram.
-
-Uma execução do smoke multiplayer falhou porque o primeiro cliente encerrava
-assim que comprovava o estado compartilhado, antes de o segundo poder verificá-lo.
-O fixture mantém os clientes conectados durante a janela de validação; a repetição
-passou. Não foi tratado como prova de falha de transporte nem ocultado.
-
-Uma importação sem liberação de sockets/configuração de cache falhou no sandbox;
-a execução com permissões locais e diretórios adequados passou. O display virtual
-não suporta VSync; o aviso é registrado. Nenhum resultado Windows foi inferido.
+O aviso reproduzido ao fechar durante carregamento foi corrigido cancelando a
+geração e finalizando a corrotina antes do shutdown. A suíte final completa não
+registrou erros nem avisos de vazamento. O display virtual emite aviso de VSync,
+que não representa validação de driver/hardware do usuário.
 
 ## Medição e limites
 
@@ -136,13 +146,13 @@ Docs/AUDIT.md. Não publicar esta entrega como 1.0 nem prometer desempenho valid
 
 Código e pacotes são preparados para a branch main do repositório
 teyranto7-cloud/Tribes-Of-Fire. O README contém links para instalador e ZIPs em
-Downloads/0.3.0-dev, acompanhados de manifesto e SHA256. Essa pasta é excluída dos
+Downloads/0.3.1-dev, acompanhados de manifesto e SHA256. Essa pasta é excluída dos
 exports, da impressão digital runtime e do ZIP de fontes para impedir cópias
-recursivas. A suíte de 235 verificações e as três exportações foram repetidas
+recursivas. A suíte de 372 verificações e as três exportações foram repetidas
 após ajustar essas exclusões. O teste Windows aceita modo headless para CI;
 qualquer resultado Windows depende de execução real posterior, não desta preparação.
 
-## Evidência Windows posterior ao empacotamento
+## Evidência Windows da versão anterior (0.3.0-dev)
 
 A [execução do workflow Windows](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41380465249)
 foi observada com status público **passing**. O job usa windows-latest e testa

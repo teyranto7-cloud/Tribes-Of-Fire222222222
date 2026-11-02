@@ -104,6 +104,9 @@ func run() -> void:
 	Store.release_lock(game.save_folder)
 	game.running = false
 	game.session.close()
+	game.runtime.audio.stop()
+	game.runtime.voice.stop()
+	game._stop_audio(game)
 	game.queue_free()
 	await process_frame
 	# Let the audio mixing thread release retired spatial playbacks after nodes exit.

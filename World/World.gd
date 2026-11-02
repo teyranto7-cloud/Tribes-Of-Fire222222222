@@ -34,6 +34,7 @@ var rain_enabled: bool = true
 var water_material: ShaderMaterial
 var reflection_probe: ReflectionProbe
 var generated: bool = false
+var generation_cancelled: bool = false
 var last_daylight: float = 1.0
 var last_wind: float = -1.0
 var graphics_config: Dictionary = {}
@@ -43,12 +44,15 @@ static func height_at(x: float, z: float) -> float:
 	return sin(x * 0.052) * 1.6 + cos(z * 0.047) * 1.4 + sin((x + z) * 0.031) * 0.8
 
 func generate(progress: Callable) -> void:
+	generation_cancelled = false
 	setup_environment()
 	for z in range(-4, 4):
 		for x in range(-4, 4):
 			make_chunk(x * 16, z * 16)
 		progress.call("Terreno / Terrain %d%%" % int((z + 5) / 8.0 * 65.0))
 		await get_tree().process_frame
+		if generation_cancelled:
+			return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = SEED
 	for i in range(TREE_COUNT):
@@ -65,6 +69,8 @@ func generate(progress: Callable) -> void:
 		if i % 16 == 0:
 			progress.call("Floresta / Forest %d%%" % (65 + int(i / 160.0 * 30)))
 			await get_tree().process_frame
+			if generation_cancelled:
+				return
 	make_scenery()
 	make_grass()
 	make_rain()
@@ -85,6 +91,9 @@ func generate(progress: Callable) -> void:
 	generated = true
 	set_quality(quality)
 	progress.call("Pronto / Ready")
+
+func cancel_generation() -> void:
+	generation_cancelled = true
 
 func make_chunk(x0: int, z0: int) -> void:
 	var surface := SurfaceTool.new()
@@ -297,9 +306,13 @@ func apply_graphics(config: Dictionary) -> void:
 	cloud_mesh.visible = bool(config["clouds"])
 	var distance := float(config["view_distance"])
 	for tree in trees:
+		var lod_distance := distance * 0.55
+		if not tree.detail_meshes.is_empty():
+			lod_distance = minf(tree.detail_meshes[0].visibility_range_end, lod_distance)
 		for mesh in tree.detail_meshes:
-			mesh.visibility_range_end = minf(mesh.visibility_range_end, distance * 0.55)
+			mesh.visibility_range_end = lod_distance
 		for mesh in tree.distant_meshes:
+			mesh.visibility_range_begin = lod_distance
 			mesh.visibility_range_end = distance
 	water_material.set_shader_parameter("detail", int(config["water"]))
 	for fire in fires:

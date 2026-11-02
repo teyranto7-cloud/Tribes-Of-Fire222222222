@@ -3,6 +3,7 @@ const ACTIONS := ["forward", "back", "left", "right", "sprint", "jump", "crouch"
 var waiting: String = ""
 var game
 var buttons: Dictionary = {}
+var config_path: String = "user://controls.cfg"
 func configure(value, _language: int = 0) -> void:
 	game = value
 	var label := Label.new()
@@ -36,7 +37,7 @@ func refresh() -> void:
 func action_name(action: String) -> String:
 	var text := action.replace("_", " ")
 	return tr(text.left(1).to_upper() + text.substr(1))
-func _unhandled_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if waiting == "" or not event.is_pressed() or not (event is InputEventKey or event is InputEventMouseButton):
 		return
 	if event is InputEventKey and event.echo:
@@ -44,15 +45,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	InputMap.action_erase_events(waiting)
 	InputMap.action_add_event(waiting, event)
 	var config := ConfigFile.new()
-	config.load("user://controls.cfg")
+	config.load(config_path)
 	config.set_value("bindings", waiting, event)
-	config.save("user://controls.cfg")
+	config.save(config_path)
 	waiting = ""
 	get_viewport().set_input_as_handled()
 	refresh()
-static func load_bindings() -> void:
+static func load_bindings(path: String = "user://controls.cfg") -> void:
 	var config := ConfigFile.new()
-	if config.load("user://controls.cfg") != OK:
+	if config.load(path) != OK:
 		return
 	for action in ACTIONS:
 		if not config.has_section_key("bindings", action): continue
