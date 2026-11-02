@@ -69,7 +69,9 @@ func _initialize() -> void:
 	life.advance(2)
 	check(life.hp == 49, "Dano reinicia o intervalo")
 	life.advance(1)
-	check(life.hp == 50, "Regeneração após novo intervalo")
+	check(life.hp == 49, "Cooldown de segurança V2 impede regeneração antes dos seis segundos")
+	life.advance(6)
+	check(life.hp == 50, "Após cooldown de seis segundos, regenerar um HP em três segundos")
 	life.damage(100)
 	life.advance(30)
 	check(life.hp == 0, "Não regenerar após morte")
@@ -113,7 +115,7 @@ func test_rain() -> void:
 	injured.hp = 1
 	var chronology = Exposure.new()
 	chronology.advance(100, true, false, injured)
-	check(injured.hp == 30, "Tick longo integra regeneração antes de cada evento de dano")
+	check(injured.hp == 10, "V2: regenerar só até40s e bloquear durante exposição danosa")
 	var stepped_life = Vitals.new()
 	stepped_life.hp = 1
 	var stepped = Exposure.new()

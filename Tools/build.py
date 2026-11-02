@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -44,6 +46,23 @@ def run(engine: str, options: list[str], log_name: str, env: dict[str, str]) -> 
     return completed.stdout
 
 
+
+def source_signature() -> str:
+    digest = hashlib.sha256()
+    excluded = {'.git', '.godot', 'builds', 'dist', '.local', '__pycache__', 'Docs', 'Tests', 'Tools', 'LICENSES'}
+    for directory, dirs, files in os.walk(ROOT):
+        dirs[:] = sorted(name for name in dirs if name not in excluded)
+        for name in sorted(files):
+            path = Path(directory) / name
+            if name.endswith('.md') or name.startswith('.'):
+                continue
+            if path.is_symlink():
+                raise SystemExit(f'Unexpected application symlink: {path}')
+            digest.update(path.relative_to(ROOT).as_posix().encode())
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--godot', default='godot')
@@ -64,7 +83,7 @@ def main() -> None:
     # --import is explicitly documented to wait for imports and then quit.
     run(engine, ['--editor', '--import'], 'import.log', env)
     tests = [name for name in ('test_rules.gd', 'test_world.gd', 'test_player.gd', 'test_input.gd',
-                              'test_gameplay.gd', 'test_runner.gd')
+                              'test_gameplay.gd', 'test_v3.gd', 'test_runner.gd')
              if (ROOT / 'Tests' / name).is_file()]
     if not tests:
         raise SystemExit('No test runner found; refusing to export an untested build')
@@ -101,6 +120,11 @@ def main() -> None:
             target.parent.name + '-export.log', env)
         if not target.is_file() or target.stat().st_size < 1024:
             raise SystemExit(f'Export did not produce an executable: {target}')
+    receipt = {'source_sha256': source_signature(), 'targets': {}}
+    for _, relative in targets:
+        target = ROOT / 'builds' / relative
+        receipt['targets'][relative] = hashlib.sha256(target.read_bytes()).hexdigest()
+    (ROOT / 'builds' / 'build-receipt.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
     print('Exports generated. Run platform smoke checks before distribution.')
 
 

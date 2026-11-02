@@ -56,3 +56,31 @@ static func beam(parent: Node3D, start: Vector3, end: Vector3, radius: float, co
 	var result := cylinder(parent, radius, start.distance_to(end), (start + end) * 0.5, color)
 	result.quaternion = Quaternion(Vector3.UP, (end - start).normalized())
 	return result
+
+static func consolidate(parent: Node3D) -> void:
+	# Bake static local transforms, preserving every triangle and material.
+	# Moving joints and collision nodes are deliberately left alone.
+	var surfaces: Dictionary = {}
+	var used_materials: Dictionary = {}
+	var originals: Array[MeshInstance3D] = []
+	for child in parent.get_children():
+		if not child is MeshInstance3D or child.mesh == null:
+			continue
+		originals.append(child)
+		for index in range(child.mesh.get_surface_count()):
+			var material: Material = child.material_override if child.material_override != null else child.mesh.surface_get_material(index)
+			var key: int = material.get_instance_id() if material != null else 0
+			if not surfaces.has(key):
+				var surface := SurfaceTool.new()
+				surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+				surfaces[key] = surface
+				used_materials[key] = material
+			surfaces[key].append_from(child.mesh, index, child.transform)
+	for child in originals:
+		parent.remove_child(child)
+		child.free()
+	for key in surfaces:
+		var merged := MeshInstance3D.new()
+		merged.mesh = surfaces[key].commit()
+		merged.material_override = used_materials[key]
+		parent.add_child(merged)

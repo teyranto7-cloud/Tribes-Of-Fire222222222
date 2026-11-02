@@ -25,7 +25,7 @@ const MUTED := Color("#b0c5b6")
 
 
 func t(pt: String, en: String) -> String:
-	return pt if language == 0 else en
+	return game.localization.text(en, pt) if game != null and game.localization != null else (pt if language == 0 else en)
 
 
 func _ready() -> void:
@@ -35,6 +35,7 @@ func _ready() -> void:
 	add_child(root)
 	var theme := Theme.new()
 	theme.default_font_size = 17
+	theme.default_font = preload("res://Assets/Fonts/NotoSansCJK-Regular.ttc")
 	theme.set_color("font_color", "Label", INK)
 	theme.set_color("font_color", "Button", INK)
 	theme.set_color("font_hover_color", "Button", GOLD)
@@ -150,6 +151,9 @@ func button(value: String, action: Callable) -> Button:
 	control.text = value
 	control.custom_minimum_size.y = 40
 	control.pressed.connect(action)
+	control.pressed.connect(func():
+		if game.runtime != null:
+			game.runtime.audio.click())
 	column.add_child(control)
 	return control
 
@@ -194,8 +198,32 @@ func show_panel(value: String) -> void:
 		return
 	clear()
 	match value:
+		"language":
+			_language()
+		"character":
+			_heading(tr("Create character"))
+			_add_panel(preload("res://UI/CharacterCreator.gd"))
+		"graphics":
+			_heading(tr("Graphics"))
+			_add_panel(preload("res://UI/GraphicsPanel.gd"))
+			button(tr("Back"), func(): show_panel("settings"))
+		"controls":
+			_heading(tr("Controls"))
+			_add_panel(preload("res://UI/ControlsPanel.gd"))
+			button(tr("Back"), func(): show_panel("settings"))
+		"communication":
+			_heading(tr("Communication"))
+			_add_panel(preload("res://UI/CommunicationPanel.gd"))
+			button(tr("Back"), func(): show_panel("pause"))
+		"death":
+			_heading(tr("You died"))
+			button(tr("Respawn"), func(): game.request_command("respawn", {}))
 		"inventory":
-			_inventory()
+			_heading(tr("Inventory"))
+			_add_panel(preload("res://UI/InventoryPanel.gd"))
+			button(tr("Drink"), func(): game.request_command("drink", {}))
+			button(tr("Cook"), func(): game.request_command("cook", {}))
+			button(tr("Back"), func(): show_panel(""))
 		"network":
 			_network()
 		"settings":
@@ -238,33 +266,10 @@ func _pause() -> void:
 		show_panel("settings"))
 	if game.session == null or game.session.is_authority():
 		button(t("Clima • administrador", "Weather • administrator"), func(): show_panel("weather"))
+	button(tr("Communication"), func(): show_panel("communication"))
 	button(t("Sair do jogo", "Quit game"), Callable(game, "quit_game"))
 	text(t("O tempo do mundo continua enquanto o processo está ativo.",
 		"World time continues while the process is running."), 14, MUTED)
-
-
-func _inventory() -> void:
-	_heading(t("INVENTÁRIO & FABRICAÇÃO", "INVENTORY & CRAFTING"))
-	if game.inventory == null:
-		text(t("Aguardando inventário do servidor…", "Waiting for server inventory…"))
-		button(t("Voltar [Tab]", "Back [Tab]"), func(): show_panel(""))
-		return
-	inventory_signature = str(game.inventory.items)
-	text(t("Madeira: %d    Fogueiras: %d    Abrigos: %d", "Wood: %d    Campfires: %d    Shelters: %d") % [
-		game.inventory.count("wood"), game.inventory.count("campfire"), game.inventory.count("shelter")], 19)
-	text(t("O machado está sempre disponível. Duas árvores fornecem madeira para uma fogueira.",
-		"Your axe is always available. Two trees provide the wood for a campfire."), 14, MUTED)
-	button(t("Fabricar fogueira • 8 madeiras", "Craft campfire • 8 wood"), Callable(game, "craft_fire")).disabled = game.inventory.count("wood") < 8
-	button(t("Fabricar abrigo com telhado • 12 madeiras", "Craft roofed shelter • 12 wood"), Callable(game, "craft_shelter")).disabled = game.inventory.count("wood") < 12
-	button(t("Equipar machado [1]", "Equip axe [1]"), func(): _equip(1))
-	button(t("Equipar fogueira [2]", "Equip campfire [2]"), func(): _equip(2))
-	button(t("Equipar abrigo [3]", "Equip shelter [3]"), func(): _equip(3))
-	button(t("Voltar [Tab]", "Back [Tab]"), func(): show_panel(""))
-
-
-func _equip(value: int) -> void:
-	game.tool = value
-	show_panel("")
 
 
 func _network() -> void:
@@ -302,60 +307,6 @@ func _network() -> void:
 		"Experimental multiplayer; 100-player capacity has not been validated. Internet hosting requires forwarding the UDP port on your router."), 14, MUTED)
 
 
-func _settings() -> void:
-	_heading(t("CONFIGURAÇÕES", "SETTINGS"))
-	var qualities := [t("Baixo", "Low"), t("Médio", "Medium"), t("Alto", "High"), "Ultra"]
-	button(t("Qualidade: ", "Quality: ") + qualities[clampi(game.quality, 0, 3)], func():
-		game.set_quality((game.quality + 1) % 4)
-		show_panel("settings"))
-	text(t("Resolução da janela", "Window resolution"), 15, MUTED)
-	var resolutions := OptionButton.new()
-	var sizes := [Vector2i(1280, 720), Vector2i(1600, 900), Vector2i(1920, 1080)]
-	var current_size := DisplayServer.window_get_size()
-	for i in range(sizes.size()):
-		resolutions.add_item("%d × %d" % [sizes[i].x, sizes[i].y])
-		if sizes[i] == current_size:
-			resolutions.select(i)
-	resolutions.item_selected.connect(func(index: int): game.set_resolution(sizes[index]))
-	column.add_child(resolutions)
-	var fullscreen := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
-	button(t("Tela cheia: ", "Fullscreen: ") + _on_off(fullscreen), func():
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if fullscreen else DisplayServer.WINDOW_MODE_FULLSCREEN)
-		show_panel("settings"))
-	button("VSync: " + _on_off(game.vsync), func():
-		game.vsync = not game.vsync
-		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if game.vsync else DisplayServer.VSYNC_DISABLED)
-		show_panel("settings"))
-	text(t("Limite de FPS", "Frame rate limit"), 15, MUTED)
-	var fps := OptionButton.new()
-	var fps_values := [30, 60, 120, 144, 0]
-	for i in range(fps_values.size()):
-		fps.add_item(t("Sem limite", "Unlimited") if fps_values[i] == 0 else str(fps_values[i]))
-		if fps_values[i] == Engine.max_fps:
-			fps.select(i)
-	fps.item_selected.connect(func(index: int): game.set_fps(fps_values[index]))
-	column.add_child(fps)
-	text(t("Sensibilidade do mouse", "Mouse sensitivity"), 15, MUTED)
-	var sensitivity := HSlider.new()
-	sensitivity.min_value = 0.001
-	sensitivity.max_value = 0.008
-	sensitivity.step = 0.0001
-	sensitivity.value = sensitivity_value
-	sensitivity.custom_minimum_size.y = 26
-	sensitivity.value_changed.connect(func(value: float):
-		sensitivity_value = value
-		game.set_sensitivity(value))
-	column.add_child(sensitivity)
-	button(t("Som: ", "Sound: ") + _on_off(game.sound), func():
-		game.sound = not game.sound
-		AudioServer.set_bus_mute(0, not game.sound)
-		show_panel("settings"))
-	button("Português / English", func():
-		language = 1 - language
-		show_panel("settings"))
-	button(t("Voltar", "Back"), func(): show_panel(previous_panel))
-
-
 func _weather() -> void:
 	_heading(t("CLIMA • ADMINISTRADOR", "WEATHER • ADMINISTRATOR"))
 	if game.session != null and not game.session.is_authority():
@@ -370,10 +321,6 @@ func _weather() -> void:
 				game.request_weather(weather_name)
 				notify_message(t("Transição climática solicitada.", "Weather transition requested.")))
 	button(t("Voltar", "Back"), func(): show_panel("pause"))
-
-
-func _on_off(value: bool) -> String:
-	return t("LIGADO", "ON") if value else t("DESLIGADO", "OFF")
 
 
 func notify_message(value: String) -> void:
@@ -391,7 +338,7 @@ func _process(delta: float) -> void:
 		hint.text = ""
 		exposure_label.text = ""
 		return
-	var equipped := t("Machado", "Axe")
+	var equipped := tr(str(game.inventory.equipped_item()).replace("_", " ").capitalize()) if game.inventory != null else tr("Axe")
 	if game.tool == 2:
 		equipped = t("Fogueira", "Campfire")
 	elif game.tool == 3:
@@ -415,8 +362,52 @@ func _process(delta: float) -> void:
 	hint.visible = mode == ""
 	hint.text = t("WASD mover • Mouse câmera • Shift correr • Espaço pular\n1 machado • 2 fogueira • 3 abrigo • Clique usar • Tab inventário • Esc menu",
 		"WASD move • Mouse camera • Shift sprint • Space jump\n1 axe • 2 campfire • 3 shelter • Click use • Tab inventory • Esc menu")
-	refresh_left -= delta
-	if mode == "inventory" and refresh_left <= 0.0 and game.inventory != null:
-		refresh_left = 0.2
-		if inventory_signature != str(game.inventory.items):
-			show_panel("inventory")
+	if game.survival != null:
+		stats.text += "\n%s %.0f   %s %.0f" % [tr("Hunger"), game.survival.hunger, tr("Thirst"), game.survival.thirst]
+	if game.player.vitals.hp <= 0 and mode != "death":
+		show_panel("death")
+	elif game.player.vitals.hp > 0 and mode == "death":
+		show_panel("")
+
+func _add_panel(script: GDScript) -> void:
+	var content = script.new()
+	column.add_child(content)
+	content.configure(game, language)
+
+func _language() -> void:
+	_heading("Selecione seu idioma / Select your language")
+	for i in range(game.localization.CODES.size()):
+		var code: String = game.localization.CODES[i]
+		button(game.localization.NAMES[i], func():
+			if game.localization.select(code):
+				notice_left = 0
+				language = game.localization.CODES.find(code)
+				if game.chat_ui != null:
+					game.chat_ui.refresh_texts()
+				show_panel("settings" if game.localization.chosen and game.running else "menu"))
+
+func _settings() -> void:
+	_heading(tr("Settings"))
+	button(tr("Graphics"), func(): show_panel("graphics"))
+	button(tr("Controls"), func(): show_panel("controls"))
+	button(tr("Language"), func(): show_panel("language"))
+	if game.running:
+		button(tr("Communication"), func(): show_panel("communication"))
+	var sound_enabled := CheckBox.new()
+	sound_enabled.text = tr("Sound")
+	sound_enabled.button_pressed = game.sound
+	sound_enabled.toggled.connect(func(v): game.sound = v; AudioServer.set_bus_mute(0, not v); game.save_settings())
+	column.add_child(sound_enabled)
+	for bus in ["Master", "Music", "Ambient", "Effects", "UI", "Vocalizations", "Voice"]:
+		var index := AudioServer.get_bus_index(bus)
+		if index < 0:
+			continue
+		text(tr("Audio") + " · " + tr(bus))
+		var slider := HSlider.new()
+		slider.min_value = 0
+		slider.max_value = 1
+		slider.step = 0.01
+		slider.value = db_to_linear(AudioServer.get_bus_volume_db(index))
+		slider.value_changed.connect(func(v): AudioServer.set_bus_volume_db(index, linear_to_db(maxf(v, 0.0001))); game.save_settings())
+		column.add_child(slider)
+	button(tr("Back"), func(): show_panel(previous_panel))

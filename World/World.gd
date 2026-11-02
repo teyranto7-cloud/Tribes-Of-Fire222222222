@@ -36,6 +36,8 @@ var reflection_probe: ReflectionProbe
 var generated: bool = false
 var last_daylight: float = 1.0
 var last_wind: float = -1.0
+var graphics_config: Dictionary = {}
+var cloud_mesh: MeshInstance3D
 
 static func height_at(x: float, z: float) -> float:
 	return sin(x * 0.052) * 1.6 + cos(z * 0.047) * 1.4 + sin((x + z) * 0.031) * 0.8
@@ -149,6 +151,16 @@ func setup_environment() -> void:
 	moon = DirectionalLight3D.new()
 	moon.light_color = Color("#7e9dc2")
 	add_child(moon)
+	cloud_mesh = MeshInstance3D.new()
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(800, 800)
+	cloud_mesh.mesh = plane
+	cloud_mesh.position.y = 45
+	cloud_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var cloud_material := ShaderMaterial.new()
+	cloud_material.shader = preload("res://Assets/Shaders/clouds.gdshader")
+	cloud_mesh.material_override = cloud_material
+	add_child(cloud_mesh)
 
 func make_scenery() -> void:
 	var rng := RandomNumberGenerator.new()
@@ -233,6 +245,9 @@ func illuminate(clock) -> void:
 	environment.fog_density = 0.003 + float(weather.get("fog", 0)) * 0.025 + float(weather.get("rain", 0)) * 0.008
 
 func apply_weather(state: Dictionary) -> void:
+	if cloud_mesh != null:
+		cloud_mesh.material_override.set_shader_parameter("density", float(state.get("cloud", 0.05)) + 0.15)
+		cloud_mesh.material_override.set_shader_parameter("tint", Color("#9baab3").lerp(Color("#d8e1d7"), last_daylight))
 	var flash := float(state.get("lightning", 0))
 	if flash > 0.5 and last_lightning <= 0.5:
 		thunder_delay = 1.5 + rain_rng.randf() * 2.0
@@ -269,6 +284,29 @@ func set_quality(value: int) -> void:
 		fire.set_quality(quality)
 	if rain_mesh != null:
 		rain_mesh.multimesh.visible_instance_count = [70, 130, 200, 280][quality]
+
+func apply_graphics(config: Dictionary) -> void:
+	graphics_config = config.duplicate(true)
+	set_quality([0, 0, 1, 2, 3, 1][int(config["preset"])])
+	sun.shadow_enabled = int(config["shadows"]) > 0
+	sun.directional_shadow_max_distance = [20.0, 45.0, 65.0, 90.0][int(config["shadows"])]
+	grass.multimesh.visible_instance_count = int(config["vegetation"])
+	grass.visibility_range_end = float(config["view_distance"]) * 0.6
+	reflection_probe.visible = bool(config["reflections"])
+	rain_enabled = bool(config["rain"])
+	cloud_mesh.visible = bool(config["clouds"])
+	var distance := float(config["view_distance"])
+	for tree in trees:
+		for mesh in tree.detail_meshes:
+			mesh.visibility_range_end = minf(mesh.visibility_range_end, distance * 0.55)
+		for mesh in tree.distant_meshes:
+			mesh.visibility_range_end = distance
+	water_material.set_shader_parameter("detail", int(config["water"]))
+	for fire in fires:
+		fire.set_quality(int(config["particles"]))
+		_apply_fire_graphics(fire, fires.find(fire))
+	environment.ssao_enabled = bool(config["ao"]) and RenderingServer.get_current_rendering_method() == "forward_plus"
+	environment.volumetric_fog_enabled = bool(config["volumetric"]) and RenderingServer.get_current_rendering_method() == "forward_plus"
 
 func nearest_tree(player: Node3D):
 	var result = null
@@ -321,6 +359,15 @@ func add_fire(at: Vector3) -> void:
 	add_child(fire)
 	fire.set_quality(quality)
 	fires.append(fire)
+	if not graphics_config.is_empty():
+		fire.set_quality(int(graphics_config["particles"]))
+		_apply_fire_graphics(fire, fires.size() - 1)
+
+func _apply_fire_graphics(fire, index: int) -> void:
+	var lighting: int = int(graphics_config.get("lighting", 1))
+	fire.light.omni_range = [5.0, 8.0, 10.0][lighting]
+	fire.light.visible = index < [6, 12, 24][lighting]
+	fire.light.shadow_enabled = int(graphics_config.get("shadows", 1)) >= 2
 
 func add_shelter(at: Vector3) -> void:
 	var shelter = ShelterScript.new()
@@ -440,7 +487,7 @@ func _physics_process(delta: float) -> void:
 	if camera != null:
 		rain_focus = camera.global_position
 	var rain := float(weather.get("rain", 0))
-	var count := int([70, 130, 200, 280][quality])
+	var count := int([70, 130, 200, 280][int(graphics_config.get("particles", quality))])
 	rain_mesh.visible = rain > 0.02 and rain_enabled
 	if not rain_mesh.visible:
 		return

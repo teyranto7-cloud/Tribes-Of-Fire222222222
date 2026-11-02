@@ -9,11 +9,21 @@ const ExposureModel = preload("res://Weather/Exposure.gd")
 const Store = preload("res://Persistence/Store.gd")
 const HUDScript = preload("res://UI/HUD.gd")
 const SessionScript = preload("res://Networking/Session.gd")
+const RuntimeScript = preload("res://Game/Runtime.gd")
+const Localization = preload("res://Localization/Manager.gd")
+const GraphicsSettings = preload("res://Graphics/Settings.gd")
+const Diagnostics = preload("res://Game/Diagnostics.gd")
 
 var world
 var player
 var hud
 var session
+var runtime
+var localization
+var graphics
+var diagnostics
+var survival
+var chat_ui
 var inventory = Inventory.new()
 var exposure = ExposureModel.new()
 var clock = Clock.new()
@@ -29,6 +39,7 @@ var quality: int = 1
 var vsync: bool = true
 var sound: bool = true
 var sensitivity: float = 0.003
+var camera_smoothing: bool = true
 var autosave: float = 0.0
 var snapshot_timer: float = 0.0
 var save_folder: String = "user://world"
@@ -44,6 +55,7 @@ var smoke_action_sent: bool = false
 var smoke_attack_timer: float = 0.0
 var smoke_progress: float = 0.0
 var smoke_moved: bool = false
+var smoke_completed: bool = false
 var quitting: bool = false
 
 func _ready() -> void:
@@ -52,6 +64,16 @@ func _ready() -> void:
 		var parts := arg.trim_prefix("--").split("=", true, 1)
 		cli[parts[0]] = parts[1] if parts.size() > 1 else "true"
 	save_folder = str(cli.get("save-dir", save_folder))
+	diagnostics = Diagnostics.new()
+	localization = Localization.new()
+	graphics = GraphicsSettings.new()
+	graphics.load_settings()
+	if cli.has("safe") or cli.has("reset-graphics"):
+		graphics.pending = GraphicsSettings.DEFAULTS.duplicate(true)
+		graphics.choose_preset(0)
+		graphics.pending["fps"] = 30
+		graphics.applied = graphics.pending.duplicate(true)
+		diagnostics.record("safe_graphics")
 	install_inputs()
 	load_settings()
 	world = WorldScript.new()
@@ -65,6 +87,7 @@ func _ready() -> void:
 	session.action_received.connect(func(id: int, action: String): commands.append({"id": id, "action": action}))
 	session.state_received.connect(_receive_state)
 	session.failed.connect(_network_failure)
+	session.command_received.connect(func(id: int, command: String, data: Dictionary): commands.append({"id": id, "command": command, "data": data}))
 	hud = HUDScript.new()
 	hud.game = self
 	add_child(hud)
@@ -77,10 +100,22 @@ func _ready() -> void:
 	menu_camera.look_at(Vector3(0, 2, -4))
 	menu_camera.current = true
 	await world.generate(Callable(hud, "loading"))
-	world.set_quality(quality)
+	graphics.apply_current(world, get_viewport())
+	runtime = RuntimeScript.new()
+	runtime.name = "Runtime"
+	add_child(runtime)
+	runtime.configure(self)
+	load_audio_levels()
+	chat_ui = preload("res://UI/ChatWidget.gd").new()
+	add_child(chat_ui)
+	chat_ui.configure(self)
+	var performance := preload("res://UI/PerformanceOverlay.gd").new()
+	add_child(performance)
+	performance.configure(self)
 	ready_world = true
 	saved = Store.load_world(save_folder)
-	hud.show_panel("menu")
+	hud.show_panel("language" if not localization.chosen and DisplayServer.get_name() != "headless" else "menu")
+	diagnostics.record("world_ready")
 	if cli.has("server") or OS.has_feature("dedicated_server"):
 		_start_host(int(cli.get("port", 24567)), true)
 		if not running:
@@ -95,7 +130,8 @@ func install_inputs() -> void:
 	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D,
 		"sprint": KEY_SHIFT, "jump": KEY_SPACE, "inventory": KEY_TAB,
 		"menu": KEY_ESCAPE, "save": KEY_F5, "load": KEY_F9,
-		"axe": KEY_1, "build": KEY_2, "shelter": KEY_3}
+		"axe": KEY_1, "build": KEY_2, "shelter": KEY_3, "interact": KEY_E,
+		"crouch": KEY_C, "dodge": KEY_Q, "heavy": KEY_F, "push_to_talk": KEY_V, "chat": KEY_ENTER}
 	for action in keys:
 		if not InputMap.has_action(action):
 			InputMap.add_action(action)
@@ -107,6 +143,12 @@ func install_inputs() -> void:
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
 	InputMap.action_add_event("use", click)
+	if not InputMap.has_action("block"):
+		InputMap.add_action("block")
+	var guard := InputEventMouseButton.new()
+	guard.button_index = MOUSE_BUTTON_RIGHT
+	InputMap.action_add_event("block", guard)
+	preload("res://UI/ControlsPanel.gd").load_bindings()
 
 func _empty_world() -> Dictionary:
 	return {"version": 2, "seed": 1337, "players": {}, "cut": [], "fires": [],
@@ -121,6 +163,7 @@ func _begin_authority(data: Dictionary) -> bool:
 	_clear_players()
 	saved = data.duplicate(true)
 	world.restore(data)
+	runtime.restore(data)
 	clock.elapsed = float(data.get("phase", 450.0))
 	weather.restore(data.get("weather", {}))
 	running = true
@@ -131,7 +174,7 @@ func new_game() -> void:
 	session.offline()
 	if _begin_authority(_empty_world()):
 		_spawn_player(1)
-		hud.show_panel("")
+		hud.show_panel("character" if player.creation_pending else "")
 
 func host_game(port: int = 24567) -> void:
 	_start_host(port, false)
@@ -150,7 +193,7 @@ func _start_host(port: int, dedicated: bool) -> void:
 		return
 	if not dedicated:
 		_spawn_player(1)
-	hud.show_panel("")
+	hud.show_panel("character" if player != null and player.creation_pending else "")
 	print("SERVER_LISTENING port=%d dedicated=%s" % [port, dedicated])
 
 func join_game(address: String, port: int = 24567) -> void:
@@ -166,6 +209,8 @@ func join_game(address: String, port: int = 24567) -> void:
 		_network_failure(error_string(error))
 
 func _network_failure(message: String) -> void:
+	if diagnostics != null:
+		diagnostics.record("network_failure")
 	running = false
 	set_controls(false)
 	hud.show_panel("menu")
@@ -179,6 +224,8 @@ func _clear_players() -> void:
 	players.clear()
 	inventories.clear()
 	exposures.clear()
+	if runtime != null:
+		runtime.needs.clear()
 	player = null
 	menu_camera.current = true
 
@@ -188,6 +235,7 @@ func _spawn_player(id: int) -> void:
 	var body = PlayerScript.new()
 	body.name = "Player_%d" % id
 	body.world = world
+	body.camera_smoothing = camera_smoothing
 	body.authoritative = session.is_authority()
 	body.local_control = id == session.local_id and session.role != "dedicated"
 	add_child(body)
@@ -197,6 +245,7 @@ func _spawn_player(id: int) -> void:
 	var origin: Array = record.get("position", [float(players.size()) * 1.5, world.height_at(float(players.size()) * 1.5, 0) + 0.2, 0])
 	body.position = Vector3(origin[0], origin[1], origin[2])
 	body.vitals.hp = int(record.get("hp", 100))
+	body.vitals.regen_delay = clampf(float(cli.get("regen-delay", "6")), 0, 60)
 	body.vitals.quiet_seconds = float(record.get("quiet_seconds", 0.0))
 	players[id] = body
 	inventories[id] = Inventory.new()
@@ -205,6 +254,7 @@ func _spawn_player(id: int) -> void:
 	exposures[id] = ExposureModel.new()
 	if record.has("exposure"):
 		exposures[id].restore(record["exposure"])
+	runtime.spawn(id, record)
 	body.respawned.connect(func():
 		if exposures.has(id):
 			exposures[id].reset()
@@ -213,6 +263,7 @@ func _spawn_player(id: int) -> void:
 		player = body
 		inventory = inventories[id]
 		exposure = exposures[id]
+		survival = runtime.needs[id]
 		body.enabled = hud.mode == ""
 	print("PLAYER_JOINED id=%d count=%d" % [id, players.size()])
 
@@ -225,6 +276,8 @@ func _remove_player(id: int) -> void:
 			saved["players"] = {}
 		saved["players"][session.player_key(id)] = _player_record(id)
 	var body = players[id]
+	runtime.channels.disconnected(session.player_key(id))
+	runtime.needs.erase(id)
 	remove_child(body)
 	body.queue_free()
 	players.erase(id)
@@ -234,7 +287,8 @@ func _remove_player(id: int) -> void:
 
 func _receive_intent(id: int, intent: Dictionary) -> void:
 	if running and session.is_authority() and players.has(id):
-		players[id].set_intent(intent)
+		if not players[id].creation_pending:
+			players[id].set_intent(intent)
 
 func _receive_action(id: int, action: String) -> void:
 	if not running or not session.is_authority():
@@ -249,13 +303,23 @@ func _receive_action(id: int, action: String) -> void:
 		return
 	var body = players[id]
 	var inv = inventories[id]
+	if body.creation_pending:
+		return
 	if body.vitals.hp <= 0:
 		return
 	match action:
 		"attack":
+			if inv.equipped_item() in ["pickaxe", "iron_pickaxe"]:
+				runtime.command(id, "mine", {})
+				return
+			if inv.equipped_item() != "axe" or world.nearest_tree(body) == null:
+				runtime.command(id, "combat", {"kind": "ranged" if inv.equipped_item() == "bow" else "light"})
+				return
 			if not body.attack():
 				return
 			var target = world.nearest_tree(body)
+			if target != null:
+				runtime.emit_sound("wood", body.position)
 			if cli.has("network-debug"):
 				print("NETWORK_ATTACK id=%d position=%s yaw=%s target=%s" % [id, body.position, body.yaw, target.tree_id if target != null else -1])
 			if target != null:
@@ -281,17 +345,21 @@ func _receive_action(id: int, action: String) -> void:
 
 func _player_record(id: int) -> Dictionary:
 	var body = players[id]
-	return {"position": [body.position.x, body.position.y, body.position.z],
+	var record := {"position": [body.position.x, body.position.y, body.position.z],
 		"inventory": inventories[id].items.duplicate(), "hp": body.vitals.hp,
 		"quiet_seconds": body.vitals.quiet_seconds, "exposure": exposures[id].state()}
+	record.merge(runtime.player_record(id), true)
+	return record
 
 func snapshot() -> Dictionary:
 	var records: Dictionary = saved.get("players", {}).duplicate(true)
 	for id in players:
 		records[session.player_key(id)] = _player_record(id)
-	return {"version": 2, "seed": 1337, "players": records, "cut": world.cut_ids(),
+	var data := {"version": 3, "seed": 1337, "players": records, "cut": world.cut_ids(),
 		"fires": world.fire_positions(), "shelters": world.shelter_positions(),
 		"phase": clock.elapsed, "weather": weather.serialize()}
+	data.merge(runtime.save_state(), true)
+	return data
 
 func network_state() -> Dictionary:
 	var bodies: Dictionary = {}
@@ -299,9 +367,16 @@ func network_state() -> Dictionary:
 		var state: Dictionary = players[id].export_state()
 		state["inventory"] = inventories[id].items.duplicate()
 		state["exposure"] = exposures[id].state()
+		state["inventory_state"] = inventories[id].serialize()
+		state["survival"] = runtime.needs[id].state()
+		state["key"] = session.player_key(id)
 		bodies[str(id)] = state
-	return {"players": bodies, "cut": world.cut_ids(), "fires": world.fire_positions(),
+	var data := {"players": bodies, "cut": world.cut_ids(), "fires": world.fire_positions(),
 		"shelters": world.shelter_positions(), "phase": clock.elapsed, "weather": weather.serialize()}
+	data.merge(runtime.save_state(), true)
+	# Group membership and block lists are sent only through authorized channel events.
+	data.erase("communication")
+	return data
 
 func _receive_state(data: Dictionary) -> void:
 	if session.is_authority() or not ready_world:
@@ -314,6 +389,7 @@ func _receive_state(data: Dictionary) -> void:
 		world_signature = signature
 	clock.elapsed = float(data["phase"])
 	weather.restore(data["weather"])
+	runtime.apply_state(data)
 	var ids: Array = []
 	for key in data["players"]:
 		var id := int(key)
@@ -321,7 +397,9 @@ func _receive_state(data: Dictionary) -> void:
 		if not players.has(id):
 			_spawn_player(id)
 		players[id].apply_state(data["players"][key])
-		inventories[id].restore(data["players"][key]["inventory"])
+		inventories[id].restore(data["players"][key].get("inventory_state", data["players"][key]["inventory"]))
+		players[id].set_meta("key", data["players"][key].get("key", ""))
+		runtime.needs[id].restore(data["players"][key].get("survival", {}))
 		var e: Dictionary = data["players"][key]["exposure"]
 		exposures[id].exposure_seconds = float(e["exposure"])
 		exposures[id].wetness = float(e["wetness"])
@@ -331,8 +409,14 @@ func _receive_state(data: Dictionary) -> void:
 	for id in players.keys():
 		if not id in ids:
 			_remove_player(id)
-	if player != null and hud.mode == "loading":
-		hud.show_panel("")
+	if player != null:
+		if player.creation_pending:
+			if DisplayServer.get_name() == "headless":
+				session.send_command("appearance", PlayerScript.Appearance.DEFAULT.duplicate(true))
+			elif hud.mode != "character":
+				hud.show_panel("character")
+		elif hud.mode in ["loading", "character"]:
+			hud.show_panel("")
 
 func save_game() -> bool:
 	if not running:
@@ -345,8 +429,10 @@ func save_game() -> bool:
 	if error != "":
 		hud.notify_message(error)
 		push_error(error)
+		diagnostics.record("save_failed", {"reason": error})
 		return false
 	saved = data
+	diagnostics.record("save_complete", {"players": data["players"].size()})
 	autosave = 0.0
 	hud.notify_message(hud.t("Progresso salvo.", "Progress saved."))
 	return true
@@ -361,7 +447,7 @@ func load_game() -> void:
 		return
 	if _begin_authority(data):
 		_spawn_player(1)
-		hud.show_panel("")
+		hud.show_panel("character" if player.creation_pending else "")
 
 func set_controls(active: bool) -> void:
 	if player != null:
@@ -396,6 +482,11 @@ func save_settings() -> void:
 	config.set_value("video", "fullscreen", DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN)
 	config.set_value("audio", "sound", sound)
 	config.set_value("input", "sensitivity", sensitivity)
+	config.set_value("input", "camera_smoothing", camera_smoothing)
+	for bus in ["Master", "Music", "Ambient", "Effects", "UI", "Vocalizations", "Voice"]:
+		var index := AudioServer.get_bus_index(bus)
+		if index >= 0:
+			config.set_value("audio_levels", bus, db_to_linear(AudioServer.get_bus_volume_db(index)))
 	if hud != null:
 		config.set_value("ui", "language", hud.language)
 	config.save("user://settings.cfg")
@@ -406,6 +497,8 @@ func load_settings() -> void:
 	quality = clampi(int(config.get_value("video", "quality", 1)), 0, 3)
 	Engine.max_fps = clampi(int(config.get_value("video", "fps", 60)), 0, 240)
 	sensitivity = clampf(float(config.get_value("input", "sensitivity", 0.003)), 0.0005, 0.01)
+	if not is_finite(sensitivity): sensitivity = 0.003
+	camera_smoothing = bool(config.get_value("input", "camera_smoothing", true))
 	vsync = bool(config.get_value("video", "vsync", true))
 	sound = bool(config.get_value("audio", "sound", true))
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
@@ -431,6 +524,14 @@ func use_tool() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not ready_world or player == null or (event is InputEventKey and event.echo):
+		return
+	if player.creation_pending:
+		return
+	if event.is_action_pressed("interact") and hud.mode == "":
+		request_command("interact", {})
+		return
+	if event.is_action_pressed("heavy") and hud.mode == "":
+		request_command("combat", {"kind": "heavy"})
 		return
 	if event.is_action_pressed("menu"):
 		hud.show_panel("pause" if hud.mode == "" else "")
@@ -464,13 +565,18 @@ func _physics_process(delta: float) -> void:
 			intent = {"move": [movement.x, movement.y], "yaw": 0.0, "jump": false, "sprint": false}
 			smoke_progress += delta
 		session.send_intent(intent)
+	runtime.tick(delta)
 	if session.is_authority():
 		while not commands.is_empty():
 			var command: Dictionary = commands.pop_front()
-			_receive_action(command["id"], command["action"])
+			if command.has("command"):
+				runtime.command(command["id"], command["command"], command["data"])
+			else:
+				_receive_action(command["id"], command["action"])
 		var state: Dictionary = weather.state()
 		for id in players:
-			exposures[id].advance(delta, bool(state["raining"]), world.is_sheltered(players[id]), players[id].vitals, world.warmth_at(players[id].position))
+			if not players[id].creation_pending:
+				exposures[id].advance(delta, bool(state["raining"]), world.is_sheltered(players[id]), players[id].vitals, world.warmth_at(players[id].position), runtime.safe(id))
 
 func _process(delta: float) -> void:
 	if not ready_world or quitting:
@@ -518,9 +624,10 @@ func _run_cli_checks(delta: float) -> void:
 		var collected := 0
 		for inv in inventories.values():
 			collected += inv.count("wood")
-		if players.size() >= 2 and snapshots_received >= 30 and smoke_moved and smoke_action_sent and not world.cut_ids().is_empty() and collected >= 4:
+		if not smoke_completed and players.size() >= 2 and snapshots_received >= 30 and smoke_moved and smoke_action_sent and not world.cut_ids().is_empty() and collected >= 4:
 			print("MULTIPLAYER_SMOKE_OK client=%s players=%d snapshots=%d moved=true shared_tree=true wood=%d" % [cli["smoke-client"], players.size(), snapshots_received, collected])
-			quit_game()
+			# Keep the peer present so the other client can verify the same shared state.
+			smoke_completed = true
 	if cli.has("quit-after-seconds") and smoke_elapsed >= float(cli["quit-after-seconds"]):
 		quit_game()
 	if cli.has("smoke-client") and smoke_elapsed > 20.0:
@@ -535,7 +642,10 @@ func quit_game() -> void:
 		return
 	quitting = true
 	save_settings()
+	diagnostics.record("shutdown", {"role": session.role})
 	Store.release_lock(save_folder)
+	runtime.audio.stop()
+	runtime.voice.stop()
 	_stop_audio(self)
 	await session.graceful_leave()
 	# Spatial audio releases its mixer-thread playbacks asynchronously.
@@ -551,3 +661,15 @@ func _stop_audio(node: Node) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST and session != null:
 		quit_game()
+
+func request_command(command: String, data: Dictionary = {}) -> void:
+	session.send_command(command, data)
+
+func load_audio_levels() -> void:
+	var config := ConfigFile.new()
+	if config.load("user://settings.cfg") != OK: return
+	for bus in ["Master", "Music", "Ambient", "Effects", "UI", "Vocalizations", "Voice"]:
+		var index := AudioServer.get_bus_index(bus)
+		var level: Variant = config.get_value("audio_levels", bus, 1.0)
+		if index >= 0 and (level is int or level is float) and is_finite(float(level)):
+			AudioServer.set_bus_volume_db(index, linear_to_db(clampf(float(level), 0.0001, 1.0)))

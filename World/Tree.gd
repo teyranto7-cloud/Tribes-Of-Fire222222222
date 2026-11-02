@@ -40,6 +40,7 @@ func setup(id: int, at: Vector3, size: float, tint: Color) -> void:
 	shape.radius = 0.29 * size
 	shape.height = 3.6 * size
 	Shapes.collider(self, shape, Vector3(0, 1.8 * size, 0))
+	Shapes.consolidate(crown)
 	for child in crown.get_children():
 		if child is GeometryInstance3D:
 			detail_meshes.append(child)

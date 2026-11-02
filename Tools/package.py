@@ -11,11 +11,12 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
+from build import source_signature
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '0.2.0-dev'
-LICENSES = ('Godot-LICENSE.txt', 'Godot-COPYRIGHT.txt')
+VERSION = '0.3.0-dev'
+LICENSES = ('Godot-LICENSE.txt', 'Godot-COPYRIGHT.txt', 'Noto-CJK-COPYRIGHT.txt')
 DOCS = ('README.md', 'ARCHITECTURE.md', 'PROGRESS.md', 'CREDITS.md')
 
 
@@ -49,6 +50,10 @@ def stage(target: str, destination: Path) -> Path:
             'exec ./TribesOfFireServer.x86_64 --headless -- --server "$@"\n',
             encoding='utf-8')
         (destination / 'start-server.sh').chmod(0o755)
+    if target == 'Windows':
+        (destination / 'SafeMode.cmd').write_text(
+            '@echo off\r\ncd /d "%~dp0"\r\n"%~dp0TribesOfFire.exe" -- --safe\r\n',
+            encoding='ascii', newline='')
     return destination
 
 
@@ -73,7 +78,19 @@ def main() -> None:
     parser.add_argument('--makensis', help='NSIS compiler path (autodetected when available)')
     parser.add_argument('--zip-only', action='store_true', help='Explicitly omit Windows installer')
     args = parser.parse_args()
-    out = ROOT / 'dist'
+    receipt_path = ROOT / 'builds' / 'build-receipt.json'
+    if not receipt_path.is_file():
+        raise SystemExit('Missing build receipt; run a successful Tools/build.py before packaging')
+    receipt = json.loads(receipt_path.read_text())
+    if receipt.get('source_sha256') != source_signature():
+        raise SystemExit('Application changed after export; rebuild before packaging')
+    for relative, expected in receipt.get('targets', {}).items():
+        binary = ROOT / 'builds' / relative
+        if not binary.is_file() or hashlib.sha256(binary.read_bytes()).hexdigest() != expected:
+            raise SystemExit('Export checksum differs from successful build: ' + relative)
+    if len(receipt.get('targets', {})) != 3:
+        raise SystemExit('Incomplete build receipt')
+    out = ROOT / 'dist' 
     out.mkdir(exist_ok=True)
     artifacts: list[Path] = []
     with tempfile.TemporaryDirectory(prefix='tribes-package-') as temp:
@@ -103,6 +120,19 @@ def main() -> None:
             if not installer.is_file() or not installer.open('rb').read(2) == b'MZ':
                 raise SystemExit('NSIS did not produce a Windows executable')
             artifacts.append(installer)
+    source_zip = out / f'TribesOfFire-{VERSION}-Source.zip'
+    with zipfile.ZipFile(source_zip, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+        for directory, dirs, files in os.walk(ROOT):
+            dirs[:] = sorted(name for name in dirs if name not in {'.git', '.godot', 'builds', 'dist', '.local', '__pycache__'})
+            for name in sorted(files):
+                path = Path(directory) / name
+                if path.is_symlink():
+                    raise SystemExit('Source archive refuses unexpected symlink: ' + str(path))
+                archive.write(path, 'TribesOfFire/' + path.relative_to(ROOT).as_posix())
+    with zipfile.ZipFile(source_zip) as archive:
+        if archive.testzip() is not None:
+            raise SystemExit('Source archive integrity failed')
+    artifacts.append(source_zip)
     checksums: list[str] = []
     manifest = {'version': VERSION, 'artifacts': []}
     for artifact in artifacts:

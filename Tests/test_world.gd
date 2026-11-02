@@ -55,6 +55,7 @@ func run() -> void:
 	var roof_hit: Dictionary = world.get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(shelter_at + Vector3.UP * 12, shelter_at, 1))
 	check(not roof_hit.is_empty() and roof_hit["collider"].is_in_group("rain_roof"), "Rain column hits roof before terrain")
 	var tree = world.trees[0]
+	check(tree.detail_meshes.size() <= 3, "Static tree geometry consolidated by material without changing collisions")
 	check(not tree.hit() and not tree.hit() and tree.hit(), "Exactly three axe hits fell a tree")
 	check(not tree.hit() and tree.collision_layer == 0, "Felled trees cannot be harvested twice and stop blocking")
 	check(world.cut_ids().has(0), "Felled resource appears in persistent state")

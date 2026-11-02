@@ -41,6 +41,7 @@ func _ready() -> void:
 	smoke.initial_velocity_min = 0.3
 	smoke.initial_velocity_max = 0.7
 	var sound := AudioStreamPlayer3D.new()
+	sound.bus = "Ambient"
 	sound.stream = make_crackle()
 	sound.unit_size = 4.0
 	sound.max_distance = 18.0

@@ -2,8 +2,15 @@ extends RefCounted
 
 const WeatherModel = preload("res://Weather/Weather.gd")
 const ExposureModel = preload("res://Weather/Exposure.gd")
+const InventoryModel = preload("res://Core/Inventory.gd")
+const Catalog = preload("res://Items/Catalog.gd")
+const Appearance = preload("res://Character/Appearance.gd")
+const Survival = preload("res://Survival/Survival.gd")
+const Tribes = preload("res://Tribes/System.gd")
+const Wildlife = preload("res://Animals/Director.gd")
+const Channels = preload("res://Communication/Channels.gd")
 const MAX_BYTES := 2097152
-const MAX_PLAYERS := 100
+const MAX_PLAYERS := 1024
 static var owned_locks: Dictionary = {}
 
 static func number(value: Variant, low: float, high: float) -> bool:
@@ -20,12 +27,15 @@ static func position_valid(value: Variant) -> bool:
 		and number(value[2], -61, 61)
 
 static func inventory_valid(value: Variant, legacy: bool = false) -> bool:
-	if not value is Dictionary or value.size() != (3 if legacy else 4):
+	if not value is Dictionary or value.size() > Catalog.ids().size() or (legacy and value.size() != 3):
 		return false
 	for key in ["wood", "campfire", "axe"]:
 		if not integer(value.get(key), 0, 9999):
 			return false
-	return value["axe"] == 1 and (legacy or integer(value.get("shelter"), 0, 9999))
+	for key in value:
+		if not key is String or not Catalog.known(key) or not integer(value[key], 0, 9999):
+			return false
+	return (not legacy or value["axe"] == 1) and (legacy or integer(value.get("shelter"), 0, 9999))
 
 static func positions_valid(value: Variant, limit: int) -> bool:
 	if not value is Array or value.size() > limit:
@@ -36,7 +46,7 @@ static func positions_valid(value: Variant, limit: int) -> bool:
 	return true
 
 static func valid(data: Variant) -> bool:
-	if not data is Dictionary or not integer(data.get("version"), 1, 2):
+	if not data is Dictionary or not integer(data.get("version"), 1, 3):
 		return false
 	if not integer(data.get("seed"), 1337, 1337) or not number(data.get("phase"), 0, 2700):
 		return false
@@ -69,6 +79,44 @@ static func valid(data: Variant) -> bool:
 			return false
 		if player.has("exposure") and (not player["exposure"] is Dictionary or not ExposureModel.valid(player["exposure"])):
 			return false
+		if player.has("regen_block_left") and not number(player["regen_block_left"], 0, 60):
+			return false
+		if player.has("survival") and (not player["survival"] is Dictionary or not Survival.valid(player["survival"])):
+			return false
+		if player.has("appearance") and (not player["appearance"] is Dictionary or not Appearance.valid(player["appearance"])):
+			return false
+		if player.has("inventory_state"):
+			if not player["inventory_state"] is Dictionary or not InventoryModel.valid_state(player["inventory_state"]):
+				return false
+			var inv := InventoryModel.new()
+			inv.restore(player["inventory_state"])
+			for key in Catalog.ids():
+				if inv.count(key) != int(player["inventory"].get(key, 0)):
+					return false
+	if data.has("tribes") and (not data["tribes"] is Dictionary or not Tribes.valid_state(data["tribes"])):
+		return false
+	if data.has("communication") and (not data["communication"] is Dictionary or not Channels.valid_state(data["communication"])):
+		return false
+	if data.has("animals") and (not data["animals"] is Array or not Wildlife.valid_state(data["animals"])):
+		return false
+	if data.has("mining"):
+		if not data["mining"] is Array or data["mining"].size() != 22:
+			return false
+		for value in data["mining"]:
+			if not integer(value, 0, 8):
+				return false
+	for field in ["workshops", "drops"]:
+		if not data.has(field):
+			continue
+		if not data[field] is Array or data[field].size() > (32 if field == "workshops" else 128):
+			return false
+		for record in data[field]:
+			if not record is Dictionary or not position_valid(record.get("position")):
+				return false
+			if field == "workshops" and (record.get("kind") not in ["workbench", "furnace"] or not record.get("owner") is String or record["owner"].length() > 128):
+				return false
+			if field == "drops" and (not record.get("id") is String or not Catalog.known(record["id"]) or not integer(record.get("count"), 1, 9999)):
+				return false
 	return data.get("weather") is Dictionary and WeatherModel.valid(data["weather"])
 
 static func migrate(data: Dictionary) -> Dictionary:
@@ -87,6 +135,7 @@ static func migrate(data: Dictionary) -> Dictionary:
 		player["hp"] = int(player["hp"])
 		for key in player["inventory"]:
 			player["inventory"][key] = int(player["inventory"][key])
+	output["version"] = 3
 	return output
 
 static func read_slot(path: String) -> Dictionary:

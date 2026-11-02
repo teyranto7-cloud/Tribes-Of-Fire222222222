@@ -1,46 +1,53 @@
-# Verificação manual e entrega
+# Validação manual — 0.3.0-dev
 
-Os resultados automatizados estão em `PROGRESS.md`. Esta lista não é uma
-declaração de aprovação manual. Registre Godot, SO, GPU, driver e resolução em
-cada execução, além dos problemas observados.
+Importação, regras, física automatizada, processo real de rede, captura/reprodução
+sintética e inspeção de sete telas renderizadas foram executados no Linux. Isso
+não substitui jogar com pessoas nem testar dispositivos físicos. Resultados e
+limitações ficam em PROGRESS.md; marque abaixo somente após executar.
 
-1. Abrir o jogo em Windows 10/11 x64 e Linux x64 reais. Confirmar menu com mundo
-   visível, textos PT/EN legíveis e créditos de felipealx.
-2. Iniciar jornada; caminhar, correr, pular e colidir com terreno e árvores.
-   Verificar câmera próxima de paredes e telhados e ausência de atravessamento.
-3. Abrir inventário; confirmar cursor livre e controles bloqueados. Fechar e
-   confirmar captura do mouse. Testar resolução, VSync, FPS, sensibilidade,
-   tela cheia e os quatro níveis gráficos.
-4. Derrubar árvores com três golpes próximos; confirmar crédito de madeira
-   uma única vez e ausência de perda do recurso quando o inventário está cheio.
-5. Fabricar fogueira com oito madeiras e abrigo com doze; verificar consumo
-   exato, prévia, posições inválidas sem consumo e colisões após construir.
-6. Examinar fogueira, fumaça/brasas, áudio espacial, sombra e iluminação à noite.
-   Verificar diferenças reais de vegetação/sombras/partículas entre qualidades.
-7. No host, ativar chuva pelo menu climático. Permanecer exposto: dano climático
-   bruto zero até 40s, primeiro dano em 55s, depois 1HP em 70/85/100s. Medir os
-   eventos e considerar a regeneração de 1HP/3s separadamente.
-8. Entrar sob telhado antes do dano; confirmar reinício da contagem, ausência
-   de chuva sob cobertura e novo período de proteção ao sair. Confirmar reset
-   quando a chuva cessa. Fogueira aquece, mas não substitui cobertura.
-9. Conferir transições de clima, áudio de chuva/trovão e iluminação de raios,
-   visibilidade em neblina e consistência de dia/noite entre clientes.
-10. Hospedar e conectar dois clientes por IP; movimentar, atacar árvores,
-    fabricar e construir no mesmo mundo. Conferir inventários individuais e
-    que intenções malformadas não concedem itens, teletransportam ou alteram HP.
-11. Salvar e reiniciar; conferir árvores, estruturas, posição e inventário.
-    Em dados de teste copiados, corromper apenas o snapshot mais recente;
-    confirmar recuperação do anterior. Confirmar falha segura com dois escritores.
-12. Extrair cada ZIP em uma pasta nova sem editor; executar o cliente Linux e
-    Windows e o servidor. Conferir arquivos de créditos/licenças presentes.
-13. No Windows, instalar `TribesOfFire-*-Windows-Setup.exe` sem administrador,
-    usar atalho do menu Iniciar, atualizar e desinstalar; conferir preservação
-    dos saves e ausência de remoção de arquivos alheios. Instalador sem assinatura
-    digital nesta versão; publicação/assinatura comercial ainda não executadas.
-14. Medir CPU/GPU, memória, frame times e tráfego de rede em hardware real,
-    inclusive Ryzen 5 4600G/16GB em 1080p, antes de declarar metas de desempenho.
+## Jogo e apresentação
 
-Não editar nem corromper saves importantes. Testes de queda abrupta devem usar
-pastas isoladas, com todos os processos encerrados antes da recuperação de lock.
-Multiplayer externo exige acesso UDP à porta configurada e testes de rede reais;
-um teste local não comprova autorização nem conectividade pela Internet.
+- [ ] Primeiro idioma em seis línguas, troca imediata, reinício e acentos/japonês.
+- [ ] Criar aparência, todos os parâmetros, rotação/zoom, nome, save e reconexão.
+- [ ] WASD, câmera perto de obstáculos, corrida/pulo, agachamento sob teto, esquiva.
+- [ ] Remapear teclas, sensibilidade/suavização, persistência e conflitos de atalhos.
+- [ ] Três golpes por árvore, concessão única, inventário cheio sem perder recurso.
+- [ ] Pilhas/divisão/arrastar, equipar, durabilidade, descarte e recuperação.
+- [ ] Colher alimentos, beber na fonte, caçar, cozinhar e comer, morrer/renascer.
+- [ ] Minerar, construir bancada/fornalha e fabricar equipamentos com custos reais.
+- [ ] Prévia/colisões/consumo de fogueira e abrigo, espaço inclinado/obstruído/água.
+- [ ] Mudanças de qualidade visíveis, confirmar resolução, esperar rollback de 15 s,
+      cancelar e verificar que resolução não confirmada não persiste.
+- [ ] Ouvir músicas de menu/criação/exploração/noite/combate e buses independentes.
+- [ ] Conferir dia/noite/tempestade, materiais, chuva sem atravessar teto e conforto.
+
+## Regras longas e rede
+
+- [ ] Cronometrar chuva 0/20/39/40/55/70/85/100/300 s: dano bruto 0/0/0/0/1/2/3/4/17.
+- [ ] Entrar/sair do teto e cessar chuva reiniciam; calor não concede imunidade.
+- [ ] Após dano esperar 6 s; primeiro HP após mais 3 s em segurança; sem HP sob
+      chuva nociva/combate/fome/sede zeradas. Não regenerar depois de morrer.
+- [ ] Animais comuns 5–10 HP e especial de urso no máximo 20 HP, com aviso legível.
+- [ ] Dois computadores veem movimento/coleta/construções/clima compartilhados.
+- [ ] Tribo bloqueia dano; saída e expulsão impedem dano bilateral durante 300 s,
+      inclusive reconectando/mudando de tribo; terceiro jogador não é protegido.
+- [ ] Transferência de líder, convites, grupos e chamadas só para destinatários.
+- [ ] Voz com microfones físicos conforme Docs/COMMUNICATION.md, todas as salas.
+- [ ] Reinício recupera aparência, inventários, fome/sede, estruturas, recursos,
+      animais, tribos, bloqueios e proteção ainda ativa.
+- [ ] Corrupção só em cópia de save; verificar fallback e erro de escrita.
+- [ ] SIGKILL e lock concorrente com cópia de mundo; recuperação só com todos os
+      processos desse mundo parados. Não remover lock de servidor ativo.
+
+## Windows e distribuição
+
+- [ ] Executar Tools/Test-Windows.ps1 em VM/conta limpa do Windows 10 x64.
+- [ ] Repetir em Windows 11 x64. Nunca usar conta com instalação/dados existentes.
+- [ ] Instalar nos seis idiomas; caixa de atalho marcada; testar desmarcada.
+- [ ] Iniciar pelo atalho sem argumentos e pela opção final do instalador.
+- [ ] Conferir ícone, diretório de trabalho, nome com acentos e pasta com espaços.
+- [ ] Atualizar preservando saves/configurações; desinstalar preservando dados.
+- [ ] Executar ZIP em máquina sem Godot e sem toolchain.
+- [ ] Medir Ryzen 4600G/16 GB/1080p e GPU dedicada: FPS, p95/p99, CPU/GPU, memória,
+      noite/chuva/base e multiplayer; não usar resultado llvmpipe como referência.
+- [ ] Testes de carga, latência/perda e segurança antes de servidores públicos.
