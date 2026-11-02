@@ -91,7 +91,7 @@ os critérios obrigatórios de 1.0 continuam incompletos.
 | ENet isolado / jogo real com dois clientes | Passou; coleta e estado compartilhados |
 | Reconexão / reinício / migração solo → dedicado | Passou; inventário, identidade e tribo preservados |
 | Comunicação com três clientes | Passou nas duas repetições finais; ver ocorrência anterior abaixo |
-| Windows nativo desta revisão | Resultado do workflow associado ao commit publicado em Actions |
+| Windows nativo desta revisão | [Aprovado](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41394174603); instalação, documentação, atalhos, headless, saves, reinício, reinstalação e uninstall |
 | Windows 10/11 gráficos, microfone físico, 4600G e 100 jogadores | **Não validados** |
 
 Registros detalhados em [Docs/TEST_REPORT.md](Docs/TEST_REPORT.md). As seis
@@ -164,3 +164,12 @@ antes do CI; os executáveis permanecem identificados por SHA256.
 
 Não houve teste gráfico em Windows 10/11, microfone físico ou benchmark no
 hardware alvo. Essas pendências e a matriz 1.0 continuam válidas.
+
+## Entrega e confirmação final da 0.3.1-dev
+
+Os cinco pacotes foram publicados em Downloads/0.3.1-dev e conferidos por um clone
+novo do GitHub. O jogo Linux extraído desse clone executou e salvou corretamente.
+A [execução Windows 41394174603](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41394174603) foi aprovada para os mesmos
+artefatos. As tentativas anteriores identificaram uma falha no teste de caminhos
+dos documentos do ZIP de fontes; corrigida no workflow sem alterar os binários.
+Evidências e limitações em Docs/TEST_REPORT.md e Docs/verification/0.3.1-dev/.

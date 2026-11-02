@@ -107,5 +107,30 @@
     "Ryzen 5 4600G performance",
     "100 players",
     "voice stability under load"
-  ]
+  ],
+  "native_windows": {
+    "status": "Success",
+    "run_url": "https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41394174603",
+    "commit": "908b647",
+    "observed_at_utc": "2026-11-02T05:30:29.032703+00:00",
+    "scope": [
+      "five artifact hashes and ZIP documentation",
+      "installation and all linked documents",
+      "desktop and Start menu shortcuts",
+      "headless exported game",
+      "save checksums and clean dedicated restart",
+      "same-version reinstall",
+      "uninstall preserving personal data and saves"
+    ],
+    "earlier_failed_runs": [
+      "41393773739",
+      "41394030410"
+    ],
+    "earlier_failure": "Workflow rejected the legitimate nested Assets/Audio/README.md; fixed exact archive-root lookup without changing packages."
+  },
+  "fresh_github_clone": {
+    "application_commit": "dcc279c3d90ffb841d65b03928512585e658723d",
+    "artifact_hashes_verified": 5,
+    "linux_zip_runtime": "Passed: GAME_READY, snapshot, released lock; editor not installed in extracted package."
+  }
 }

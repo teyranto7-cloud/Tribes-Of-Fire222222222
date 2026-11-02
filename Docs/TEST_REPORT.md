@@ -143,3 +143,22 @@ permitem repetir os casos. Build/export/NSIS exigem ferramentas descritas no
 README. Instalação/QA Windows exige conta de teste limpa. A matriz interativa está
 em `Tests/MANUAL.md`; requisitos ainda ausentes estão em `Docs/AUDIT.md`.
 Esta entrega é **0.3.1-dev**, sem certificação 1.0 ou publicação Steam.
+
+## Validação Windows posterior à geração dos pacotes
+
+A [execução 41394174603](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41394174603) do commit `908b647` foi observada com
+status **Success**. Conferiu os cinco hashes/documentação dos ZIPs e executou
+instalação, documentação/atalhos, jogo headless, saves/checksums, reinício dedicado,
+reinstalação e desinstalação preservando dados. Relatórios JSON/CSV e logs estão
+no artefato `windows-native-results` dessa execução.
+
+As duas tentativas anteriores (41393773739 e 41394030410) falharam na conferência
+dos ZIPs antes da instalação: o teste contava dois README no ZIP de fontes,
+incluindo o documento legítimo de Assets/Audio. O workflow foi corrigido para
+consultar o caminho exato do README principal. Os cinco artefatos permaneceram
+inalterados; nenhum sucesso foi inferido do badge de uma execução anterior.
+
+Uma cópia nova clonada do GitHub em caminho com espaços/acentos confirmou os cinco
+hashes. O ZIP Linux desse clone executou fora do editor, salvou snapshot e
+liberou o lock ao sair. A aprovação Windows é headless; as pendências gráficas,
+de voz física, carga e desempenho listadas acima continuam válidas.

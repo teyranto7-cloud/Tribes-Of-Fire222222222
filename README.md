@@ -39,9 +39,9 @@ No Windows, execute `TribesOfFire-0.3.1-dev-Windows-Setup.exe`, ou extraia o ZIP
 Windows e abra `TribesOfFire.exe`. O instalador oferece seis idiomas, atalho na
 área de trabalho marcado por padrão, menu Iniciar, execução ao terminar e
 instalação por usuário, sem privilégios de administrador. A desinstalação preserva
-os saves. O instalador é compilado com NSIS e validado pelo workflow Windows
-associado ao commit publicado; consulte o resultado em Actions. A versão anterior
-0.3.0 passou por instalação, execução headless, saves e desinstalação nesse runner.
+os saves. Esta versão passou pela [validação nativa Windows](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41394174603):
+instalação, documentação/atalhos, execução headless, saves/reinício, reinstalação
+e desinstalação em um runner limpo do GitHub.
 **Renderização e uso interativo em Windows 10/11 continuam pendentes.** Existe um roteiro automatizado em
 [Tools/Test-Windows.ps1](Tools/Test-Windows.ps1) para uma conta Windows de teste.
 
@@ -236,3 +236,7 @@ migração solo → dedicado. A comunicação passou nas duas repetições finai
 execução concorrente anterior falhou por entregas de áudio ausentes. Isso permanece
 registrado como limite da validação sob carga, sem prometer transporte de voz livre
 de perdas. Detalhes e limites em [Docs/TEST_REPORT.md](Docs/TEST_REPORT.md).
+
+A [validação Windows da 0.3.1-dev](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41394174603) foi aprovada.
+[Logs e resultados da auditoria](https://github.com/teyranto7-cloud/Tribes-Of-Fire/tree/main/Docs/verification/0.3.1-dev)
+estão no repositório, incluindo a ocorrência anterior de comunicação que falhou.
