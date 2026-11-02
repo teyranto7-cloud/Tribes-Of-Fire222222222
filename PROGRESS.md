@@ -85,7 +85,8 @@ um teste separado. Logs finais ficam em builds/logs/ e evidências em Docs/TEST_
 Durante integração: inferência GDScript em testes, validação NUL de texto que
 rejeitava mensagens válidas, layout de pilhas após crafting, preview de resolução
 salvo antes da confirmação, ataque principal do arco que não selecionava modo
-ranged e envio público das preferências privadas de comunicação e durabilidade de ferramenta substituta. Foram corrigidos
+ranged e envio público das preferências privadas de comunicação e durabilidade de ferramenta substituta. A tradução de nomes compostos de
+itens/controles também foi ajustada às chaves dos catálogos. Foram corrigidos
 e os testes correspondentes passaram.
 
 Uma execução do smoke multiplayer falhou porque o primeiro cliente encerrava

@@ -53,7 +53,7 @@ func configure(value, _language: int = 0) -> void:
 		add_child(button)
 	_refresh(true)
 func item_name(id: String) -> String:
-	return tr(id.replace("_", " ").capitalize())
+	return Catalog.display_name(id)
 func cost_text(cost: Dictionary) -> String:
 	var parts := PackedStringArray()
 	for item in cost:
@@ -82,7 +82,7 @@ func _refresh(force: bool = false) -> void:
 	_signature = hash(state)
 	for i in range(buttons.size()):
 		var slot: Dictionary = state["slots"][i]
-		buttons[i].text = "—" if slot.is_empty() else tr(str(slot["id"]).replace("_", " ").capitalize()) + "\n%d" % slot["count"]
+		buttons[i].text = "—" if slot.is_empty() else item_name(slot["id"]) + "\n%d" % slot["count"]
 		buttons[i].tooltip_text = buttons[i].text
 	var current: Dictionary = state["slots"][selected]
 	detail.text = str(selected + 1) + " • " + ("—" if current.is_empty() else item_name(current["id"]))

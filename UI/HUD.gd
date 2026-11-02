@@ -338,7 +338,7 @@ func _process(delta: float) -> void:
 		hint.text = ""
 		exposure_label.text = ""
 		return
-	var equipped := tr(str(game.inventory.equipped_item()).replace("_", " ").capitalize()) if game.inventory != null else tr("Axe")
+	var equipped := preload("res://Items/Catalog.gd").display_name(game.inventory.equipped_item()) if game.inventory != null else tr("Axe")
 	if game.tool == 2:
 		equipped = t("Fogueira", "Campfire")
 	elif game.tool == 3:

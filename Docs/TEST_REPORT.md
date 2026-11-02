@@ -60,7 +60,7 @@ nem apresentado como validação Windows. A matriz manual completa está em Test
 
 Hash SHA256 das fontes runtime no recibo da exportação:
 
-`a0fa04d2d0847667a063aca152c31c4cd358ebd0712feb7aa31b7effd15597d9`
+`f0b8920246b32cee868b638b03fb79ff3cf841e2a665b76423b5552e91bae0e9`
 
 O empacotador compara esse hash e os três hashes de executáveis antes de criar
 pacotes. Alterar código exige nova exportação. Recibo completo em

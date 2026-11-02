@@ -26,13 +26,16 @@ func configure(value, _language: int = 0) -> void:
 	for action in ACTIONS:
 		var button := Button.new()
 		buttons[action] = button
-		button.pressed.connect(func(): waiting = action; button.text = tr(action.replace("_", " ").capitalize()) + ": …")
+		button.pressed.connect(func(): waiting = action; button.text = action_name(action) + ": …")
 		add_child(button)
 	refresh()
 func refresh() -> void:
 	for action in buttons:
 		var events := InputMap.action_get_events(action)
-		buttons[action].text = tr(action.replace("_", " ").capitalize()) + " : " + (events[0].as_text() if not events.is_empty() else "—")
+		buttons[action].text = action_name(action) + " : " + (events[0].as_text() if not events.is_empty() else "—")
+func action_name(action: String) -> String:
+	var text := action.replace("_", " ")
+	return tr(text.left(1).to_upper() + text.substr(1))
 func _unhandled_input(event: InputEvent) -> void:
 	if waiting == "" or not event.is_pressed() or not (event is InputEventKey or event is InputEventMouseButton):
 		return

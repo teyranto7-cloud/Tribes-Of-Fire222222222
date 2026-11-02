@@ -30,3 +30,9 @@ static func damage(id: String) -> int:
 	return int(WEAPONS.get(id, 0))
 static func armor(id: String) -> float:
 	return float(ARMOR.get(id, 0.0))
+static func display_name(id: String) -> String:
+	var text := id.replace("_", " ").to_lower()
+	if text.is_empty():
+		return "—"
+	# Catalog keys use sentence case; String.capitalize() title-cases every word.
+	return TranslationServer.translate(text.left(1).to_upper() + text.substr(1))

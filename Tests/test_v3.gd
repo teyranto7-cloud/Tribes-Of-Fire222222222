@@ -1,5 +1,6 @@
 extends SceneTree
 const Inventory = preload("res://Core/Inventory.gd")
+const Catalog = preload("res://Items/Catalog.gd")
 const Tribes = preload("res://Tribes/System.gd")
 const Channels = preload("res://Communication/Channels.gd")
 const Codec = preload("res://Communication/ADPCM.gd")
@@ -118,7 +119,7 @@ func run() -> void:
 	for code in Localization.CODES:
 		check(localization.select(code), "Locale selection saves: " + code)
 		check(not localization.text("Settings").is_empty(), "Translated settings available: " + code)
-	check(localization.select("ja") and localization.text("Name") == "名前", "Japanese translation is real")
+	check(localization.select("ja") and localization.text("Name") == "名前" and Catalog.display_name("copper_ore") == "銅鉱石", "Japanese UI and compound item translations are real")
 	check(Localization.new(locale_path).locale == "ja", "Language persists across restart")
 	DirAccess.remove_absolute(locale_path)
 	TranslationServer.set_locale("en_US")
