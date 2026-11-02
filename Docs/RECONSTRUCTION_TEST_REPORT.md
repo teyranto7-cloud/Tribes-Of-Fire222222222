@@ -174,6 +174,12 @@ Os pacotes preparados em `Downloads/0.4.0-dev` ainda não foram enviados.
 
 ## K — Publicação
 
+Atualização: na nova tentativa, API respondeu200 e a autenticação confirmou acesso
+de escrita. Histórico remoto inicial e trabalho local foram integrados sem force
+push. A confirmação do envio e QA seguirá em [PUBLICATION.md](PUBLICATION.md).
+O relato de403 abaixo é histórico da tentativa anterior.
+
+
 Destino: https://github.com/teyranto7-cloud/Tribes-Of-Fire. A API recebeu bloqueio 403
 do proxy na conexão HTTPS; gh auth status não validou a autenticação disponível.
 Publicação suspensa conforme pedido, sem contorno. Nenhum push/release novo foi

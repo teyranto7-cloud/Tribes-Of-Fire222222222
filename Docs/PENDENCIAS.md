@@ -52,9 +52,10 @@ Logs e recibo: [verification/0.4.0-dev](verification/0.4.0-dev).
    foi exportado. Não transferir a aprovação antiga para o binário novo.
 6. Completar traduções novas e a matriz individual do relatório de conteúdo,
    distinguindo código implementado, MVP parcial e proposta ausente.
-7. Publicar somente após os testes exigidos. O proxy bloqueou api.github.com (403)
-   e o gh não validou a autenticação; a publicação está suspensa conforme pedido,
-   sem contornar a política. Corrigir acesso e segredo do ambiente antes de tentar.
+7. Conferir os resultados nativos do workflow Windows antes de declarar a nova
+   instalação validada. O acesso à API foi restabelecido e a autenticação existente
+   funcionou; a publicação de desenvolvimento será conferida no remoto, sem force
+   push. O estado atual está em PUBLICATION.md. As demais pendências impedem 1.0.
 
 ## Sistemas mínimos que ainda precisam expansão
 

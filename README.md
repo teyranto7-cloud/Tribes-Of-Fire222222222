@@ -9,24 +9,31 @@ pendentes estão em [PROGRESS.md](PROGRESS.md) e [Docs/PENDENCIAS.md](Docs/PENDE
 
 ## Versões e downloads
 
-A última versão **publicada** é **0.3.1-dev**. Estes links não contêm as alterações
-0.4.0-dev:
+**0.4.0-dev — versão de desenvolvimento.** Os executáveis não precisam do editor
+Godot instalado. Instale o pacote Windows ou extraia o ZIP do seu sistema:
 
-- [Instalador Windows x64 0.3.1](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Windows-Setup.exe)
-- [Windows ZIP 0.3.1](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Windows.zip)
-- [Linux ZIP 0.3.1](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Linux.zip)
-- [Servidor Linux ZIP 0.3.1](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Server-Linux.zip)
-- [Código-fonte ZIP 0.3.1](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Source.zip)
-- [SHA256 dos pacotes 0.3.1](Downloads/0.3.1-dev/SHA256SUMS.txt)
+- [Instalador Windows x64](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.4.0-dev/TribesOfFire-0.4.0-dev-Windows-Setup.exe)
+- [Windows ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.4.0-dev/TribesOfFire-0.4.0-dev-Windows.zip)
+- [Linux ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.4.0-dev/TribesOfFire-0.4.0-dev-Linux.zip)
+- [Servidor dedicado Linux ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.4.0-dev/TribesOfFire-0.4.0-dev-Server-Linux.zip)
+- [Código-fonte ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.4.0-dev/TribesOfFire-0.4.0-dev-Source.zip)
+- [SHA256](Downloads/0.4.0-dev/SHA256SUMS.txt) e [manifesto](Downloads/0.4.0-dev/manifest.json)
 
-A versão 0.4.0-dev foi exportada localmente para Windows, Linux e servidor Linux.
-A suíte completa passou em 458 verificações e o teste dos executáveis Linux passou
-em 6 verificações. O executável Windows foi gerado, mas ainda não foi testado em
-Windows nativo. Instalador NSIS e ZIPs Windows/Linux/servidor/fontes foram gerados localmente, com CRC e SHA256 verificados. Os novos pacotes não foram publicados. A tentativa atual de publicação foi interrompida:
-`api.github.com` recebeu bloqueio 403 do proxy, e o `gh` não conseguiu validar a
-autenticação disponível. Conforme a solicitação de continuidade, esse bloqueio não
-será contornado. O acesso à API e a credencial do ambiente precisam ser corrigidos
-antes do envio; nenhum token deve ser colado no chat ou adicionado aos arquivos.
+Windows: execute o instalador ou extraia o ZIP e abra `TribesOfFire.exe`.
+Linux: extraia o ZIP, execute `chmod +x TribesOfFire.x86_64` e
+`./TribesOfFire.x86_64`. Faça backup dos dados em `user://` antes de atualizar;
+preserve `identity.cfg` para recuperar seu personagem no servidor.
+
+A suíte completa passou em **458 verificações**; os testes dos executáveis Linux
+passaram em mais 6. Também passaram 50 reinícios, integração com dois clientes e
+comunicação com três clientes usando áudio sintético. Instalação/runtime nativos
+Windows são conferidos pelo [workflow Windows](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/workflows/windows-qa.yml);
+renderização em Windows 10/11, microfone físico, hardware alvo e carga permanecem
+pendentes. Isso não certifica jogo completo, 60 FPS ou 100 jogadores.
+
+Pacotes anteriores e suas evidências permanecem em `Downloads/0.3.1-dev` e
+`Docs/verification/0.3.1-dev`. A documentação dentro dos pacotes registra o estado
+na sua geração; consulte este README e o relatório atual para resultados posteriores.
 
 ## Executar o código-fonte
 
@@ -39,8 +46,8 @@ cd Tribes-Of-Fire
 godot --path .
 ```
 
-Um clone obtém somente o que já foi publicado. Para usar uma revisão local ainda
-não enviada, abra o checkout ou ZIP de fontes correspondente.
+O checkout contém código, assets, testes e instruções de build. A pasta
+`Downloads/0.4.0-dev` contém os pacotes preparados desta revisão.
 
 Escolha o idioma, uma nova jornada, a seed e o personagem. Mundos novos usam um
 terreno de **320 × 320 m** com geração determinística; saves anteriores preservam

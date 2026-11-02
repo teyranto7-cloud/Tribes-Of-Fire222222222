@@ -130,9 +130,10 @@ e os resultados em [Docs/verification/0.3.1-dev](Docs/verification/0.3.1-dev) s�
 históricos dessa versão, não certificam a 0.4.0-dev. README/arquitetura/progresso
 anteriores foram preservados nessa pasta para comparação.
 
-O envio atual foi suspenso porque a conexão com `api.github.com` recebeu 403 do
-proxy e `gh auth status` não conseguiu validar a autenticação disponível. Não foi
-feito bypass, push nem criação de release. O ambiente precisa permitir a API e
-fornecer autenticação válida por segredo do ambiente antes de repetir o envio.
-Nenhum token deve entrar no repositório ou no chat. O repositório de destino
-continua `https://github.com/teyranto7-cloud/Tribes-Of-Fire`.
+Na tentativa anterior, a publicação parou por bloqueio403 e autenticação não
+validada. Após a alteração do ambiente, API respondeu200, `gh` autenticou e o
+repositório confirmou acesso de escrita. O remoto continha apenas o commit inicial
+`bf0faa7`, sem ancestral comum com o projeto: os históricos foram integrados sem
+remover trabalho nem usar force push. Código e cinco pacotes0.4-dev seguem para
+publicação de desenvolvimento; confirmação remota e QA serão registrados depois
+que forem observados. Veja [Docs/PUBLICATION.md](Docs/PUBLICATION.md).
