@@ -54,9 +54,15 @@ VSync indisponível no display virtual foi registrado como aviso.
 
 NSIS 3.11 compilou instalador Unicode com seis tabelas de idioma. ZIPs têm teste
 CRC, headers dos binários são conferidos e SHA256 acompanha os artefatos.
-**Instalar/executar no Windows 10/11 e usar microfones físicos: não executado.**
-`Tools/Test-Windows.ps1` foi preparado para conta Windows limpa; não foi executado
-nem apresentado como validação Windows. A matriz manual completa está em Tests/MANUAL.md.
+O workflow Windows foi publicado e a [execução aprovada](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41380465249)
+foi observada com status público passing. Tools/Test-Windows.ps1 executa em modo
+headless em windows-latest: instalação, atalhos, startup, SHA256/schema dos saves,
+reinício dedicado, preservação de jogadores/relógio/lock, reinstalação da mesma
+versão e desinstalação. Os relatórios detalhados estão no artefato da execução.
+Essa validação ocorreu depois da geração dos pacotes e não equivale a jogar em
+um Windows desktop com GPU e dispositivos físicos.
+**Windows 10/11 gráficos/interativos e microfones físicos: não executados.**
+A matriz manual completa está em Tests/MANUAL.md.
 
 Hash SHA256 das fontes runtime no recibo da exportação:
 

@@ -71,7 +71,8 @@ os critérios obrigatórios de 1.0 continuam incompletos.
 | Linux exportado fora do editor: solo/dedicado/reinício | 6 verificações, 0 falhas; snapshots/checksums/locks conferidos |
 | Linux exportado com OpenGL | Renderizou, iniciou jornada, salvou e saiu com código 0; aviso de VSync do display virtual |
 | ZIPs / instalador NSIS | Gerados; NSIS Unicode com seis tabelas de idioma, ZIPs verificados e hashes em dist/ |
-| Execução/instalação Windows 10/11 | **Não executada** neste ambiente Linux |
+| Instalação e runtime headless Windows em CI | Workflow aprovado; atalho, saves, restart, reinstalação e uninstall |
+| Windows 10/11 gráficos, interativos e hardware real | **Não executados** |
 | Voz com microfones/fones físicos | **Não executada**; testes usaram sinal sintético |
 | 60 FPS no 4600G / 100 jogadores | **Não comprovados** |
 
@@ -140,3 +141,16 @@ exports, da impressão digital runtime e do ZIP de fontes para impedir cópias
 recursivas. A suíte de 235 verificações e as três exportações foram repetidas
 após ajustar essas exclusões. O teste Windows aceita modo headless para CI;
 qualquer resultado Windows depende de execução real posterior, não desta preparação.
+
+## Evidência Windows posterior ao empacotamento
+
+A [execução do workflow Windows](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41380465249)
+foi observada com status público **passing**. O job usa windows-latest e testa
+o instalador, atalhos, inicialização headless, snapshots/checksums, reinício
+dedicado, preservação de jogadores/relógio/lock, reinstalação da mesma versão e
+desinstalação preservando dados. Os relatórios JSON/CSV e logs estão no artefato
+da execução. Essa evidência atualiza as notas anteriores dos pacotes, gerados
+antes do CI; os executáveis permanecem identificados por SHA256.
+
+Não houve teste gráfico em Windows 10/11, microfone físico ou benchmark no
+hardware alvo. Essas pendências e a matriz 1.0 continuam válidas.

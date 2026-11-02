@@ -38,8 +38,9 @@ No Windows, execute `TribesOfFire-0.3.0-dev-Windows-Setup.exe`, ou extraia o ZIP
 Windows e abra `TribesOfFire.exe`. O instalador oferece seis idiomas, atalho na
 área de trabalho marcado por padrão, menu Iniciar, execução ao terminar e
 instalação por usuário, sem privilégios de administrador. A desinstalação preserva
-os saves. **O instalador foi compilado no Linux; instalação e execução em Windows
-10/11 ainda não foram testadas.** Existe um roteiro automatizado em
+os saves. O instalador foi compilado no Linux e passou por instalação, execução sem
+interface gráfica, saves e desinstalação em um runner Windows do GitHub.
+**Renderização e uso interativo em Windows 10/11 continuam pendentes.** Existe um roteiro automatizado em
 [Tools/Test-Windows.ps1](Tools/Test-Windows.ps1) para uma conta Windows de teste.
 
 No Linux, extraia o ZIP Linux, dê permissão de execução se necessário
@@ -205,3 +206,7 @@ O modo headless não valida renderização, áudio físico, instalação interat
 Windows 10/11 em máquinas de jogadores ou desempenho. Esses testes continuam no
 roteiro manual. Para validar graficamente em uma conta Windows de teste, execute
 Tools/Test-Windows.ps1 sem a opção -Headless.
+
+Resultado observado: [primeira execução Windows aprovada](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41380465249).
+Esse resultado corresponde ao teste headless descrito acima, com os pacotes
+publicados; não certifica renderização nem o conjunto completo da versão 1.0.

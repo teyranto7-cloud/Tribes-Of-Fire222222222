@@ -16,3 +16,6 @@ raiz do repositório. Licenças de Godot e Noto acompanham cada pacote.
 
 A pasta Downloads não é importada pelo Godot nem embutida nos exports ou no ZIP
 de fontes. Os arquivos do projeto continuam disponíveis normalmente no checkout.
+
+O workflow Windows passou na [execução headless publicada](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41380465249).
+Consulte o README principal para distinguir essa evidência dos testes gráficos pendentes.
