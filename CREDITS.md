@@ -2,13 +2,18 @@
 
 Criador: **felipealx**
 
-Geometria, personagens, vegetação, ícone, materiais e áudio procedural próprios
-do projeto. Nenhum recurso de Zelda foi usado.
+Geometria, personagens, animais, vegetação, ícone, shaders e áudio procedural
+originais deste projeto. As vinte faixas/efeitos WAV foram sintetizados para a
+versão de desenvolvimento. Não há assets extraídos de Zelda ou filmes.
 
-Engine: Godot Engine 4.6.3 — https://godotengine.org/license/
+Godot Engine 4.6.3 — https://godotengine.org/license/ — MIT.
+Atribuições completas da engine/componentes: `LICENSES/Godot-LICENSE.txt` e
+`LICENSES/Godot-COPYRIGHT.txt`.
 
-As atribuições oficiais da engine e de seus componentes acompanham os binários
-em `LICENSES/Godot-LICENSE.txt` e `LICENSES/Godot-COPYRIGHT.txt`.
+Noto Sans CJK — Google e colaboradores, SIL Open Font License 1.1.
+Fonte TTC e atribuições oficiais redistribuídas em
+`LICENSES/Noto-CJK-COPYRIGHT.txt`. A fonte não foi criada pelo projeto.
 
-O instalador é compilado com NSIS. O setup utiliza pacotes oficiais Debian
-verificados pelo APT. Nenhum recurso pago é necessário para compilar ou jogar.
+Instalador compilado com NSIS 3.11; ferramentas obtidas de pacotes Debian
+assinados. Não há dependência paga obrigatória. Arte, música e animações desta
+entrega são iniciais e precisam de produção/revisão antes de um lançamento comercial.

@@ -1,73 +1,87 @@
-# Arquitetura — 0.2.0-dev
+# Arquitetura — 0.3.0-dev
 
-`Main.gd` coordena menus, ciclo local, autoridade, persistência e replicação.
-O projeto anterior foi preservado em módulos, com evolução dos visuais e regras.
+A implementação 0.1 foi materializada e preservada. `Main.gd` coordena entrada,
+ciclo de vida, autoridade, saves e replicação; `Game/Runtime.gd` integra os novos
+comandos e módulos sem substituir as funcionalidades anteriores.
 
-| Módulo | Responsabilidade |
+| Módulo | Responsabilidade atual |
 |---|---|
-| World | Terreno triangulado com colisão, 160 árvores determinísticas, grama MultiMesh, água visual, relógio e luz |
-| Player | Física CharacterBody3D na autoridade, intenções limitadas, timeout, câmera SpringArm e modelo articulado original |
-| Core | Inventário, crafting atômico, limites e vida/regeneração |
-| Weather | Modelo determinístico, transições, estados sincronizados, exposição e integração cronológica de dano/regeneração |
-| Building | Fogueira com som espacial, calor, brasas/fumaça e abrigo com painéis inclinados de colisão no teto |
-| Networking | ENet, RPC de intenções/ações, validação de remetente e limites de frequência, snapshots da autoridade |
-| Persistence | Schema v2, migração v1, SHA256, snapshots alternados e lock exclusivo por processo |
-| UI | PT-BR/EN, menus, inventário, servidor, clima administrativo e configurações |
-| Tools | Setup, importação, testes, exportação, ZIP e instalador NSIS |
+| World | Terreno 128 × 128 m, seed 1337, colisão, 160 árvores, LOD, grama MultiMesh, água, sol/lua, relógio |
+| Player / Character | CharacterBody3D autoritativo, câmera, movimento, agachamento/esquiva, modelo e Skeleton3D de nove ossos, aparência cosmética validada |
+| Core / Items | 36 espaços, pilhas, transações, equipamentos/durabilidade, catálogo e receitas, vida e regeneração segura |
+| Survival | Fome/sede, consumo real de alimentos/água, cozimento, dano por privação |
+| Weather | Transições, vento, chuva, temperatura, relâmpagos/trovões, exposição e eventos cronológicos de dano |
+| Building | Fogueira com calor/áudio, abrigo com telhado físico, bancada e fornalha |
+| Mining | 22 depósitos/coletáveis, alcance e ferramenta, consumo autoritativo persistido |
+| Animals | Seis espécies/12 animais, AStarGrid2D sobre terreno, perseguição/fuga, ataque com aviso, morte e saque único |
+| Combat | Alcance, direção, oclusão por raio, resistência/cooldown, bloqueio, esquiva, armadura, arma/amunição, PvP e limites de dano |
+| Tribes | Líder, convites, entrada/saída/expulsão, proteção bilateral com expiração UTC persistida |
+| Networking | ENet, quatro canais, intenção e comandos com whitelist, limite de frequência, snapshots confiáveis a 10 Hz |
+| Communication | Roteamento server-side, grupos/salas/chamadas, texto, captura opt-in, codec IMA ADPCM, jitter limitado e reprodução espacial/remota |
+| Graphics / UI / Localization | Configuração aplicada/pendente, preview de resolução, seis perfis, seis catálogos, fonte CJK, painéis funcionais |
+| Audio | Pool de 16 efeitos posicionais, passos, ambiente e música com transições, buses independentes |
+| Persistence | Schema v3, migrações, SHA256, dois slots, temporário validado e lock exclusivo |
+| Tools / Tests | Setup fixado, testes de regras/integrados/processos, exportação, recibo de build, ZIPs, NSIS, QA Windows e amostragem gráfica |
 
-## Autoridade e apresentação
+## Autoridade
 
-Solo, anfitrião e servidor dedicado usam as mesmas regras. O cliente manda eixo
-de movimento, orientação e ações. O servidor executa física e valida alcance,
-cooldown, recursos e espaço para construir. IDs vêm da conexão, não do payload.
-Clientes interpolam os estados de jogadores recebidos; predição avançada e
-compensação de latência ainda não foram implementadas. Snapshots são enviados
-a 10 Hz, com transporte confiável para estados maiores que o MTU.
+Solo, anfitrião e dedicado usam as mesmas regras. Peer IDs vêm do transporte;
+clientes enviam intenções e identificadores permitidos, sem conceder itens, HP,
+dano ou posição final. O servidor valida física, alcance, recursos, cooldown,
+ferramentas, receitas e espaço. Aparência tem schema e limites cosméticos.
+Clientes interpolam jogadores; não há predição avançada ou compensação de latência.
+Estados grandes usam fragmentação confiável; falta protocolo incremental por
+relevância. Inventários ainda constam nos snapshots compartilhados, uma limitação
+de privacidade que precisa ser removida antes de servidores públicos.
 
-Um handshake vincula o peer temporário ao hash de uma identidade aleatória local.
-Inventário e posição sobrevivem a uma nova conexão; uma identidade já conectada
-é rejeitada. A identidade trafega por ENet sem criptografia; o protocolo é para
-desenvolvimento em redes confiáveis e ainda precisa de autenticação comercial.
+O handshake vincula peer temporário a hash de token aleatório local persistido;
+reconexões recuperam o jogador, e identidade duplicada é recusada. Transporte e
+token não têm a segurança de autenticação comercial. Testar apenas em redes de
+confiança nesta fase. Senhas, Steam e criptografia são trabalho pendente.
 
-O servidor é a única origem de dano climático. Exposure integra os eventos de
-regeneração e dano em ordem temporal, inclusive quando um tick cruza vários
-intervalos. O cliente apenas mostra esses contadores. A cobertura é consultada
-por raycast no teto físico. Colunas visuais de chuva terminam na primeira
-superfície e são invalidadas quando um abrigo é construído.
+Grupos, bloqueios e chamadas não são enviados nos snapshots gerais. Cada jogador
+recebe apenas seus grupos, chamadas e convite por evento dirigido. A autoridade
+seleciona destinatários por posições e filiação reais; mudança de liderança retira
+a autorização diplomática. Chamadas exigem aceite e terminam na desconexão.
+Proteção de saída de tribo captura membros/tribo anteriores com expiração UTC;
+mudar de tribo ou desconectar não a elimina. Relógio UTC do servidor deve ser
+administrado corretamente; não existe proteção contra alterações do relógio do SO.
 
-## Renderização e mundo
+## Tempo, chuva e sobrevivência
 
-O terreno mede 128 × 128 m, seed fixa 1337. A geração distribui trabalho entre
-frames; não é streaming de mundo nem geração assíncrona em threads. A grama usa
-instancing e shader de vento; árvores têm troncos, galhos e copas próprias.
-Árvores alternam entre malhas detalhadas e simplificadas por distância.
-Personagem usa peças anatômicas arredondadas e animação procedural articulada.
-Áudio de chuva, trovão e fogo é sintetizado no projeto.
+Apenas a autoridade avança exposição e HP. `Exposure.advance` divide o tempo nos
+limites de 40/55/70 s e integra eventos em ordem cronológica, inclusive ticks longos.
+A partir de 40 s de chuva sem teto, regeneração é suspensa. Primeiro dano em 55 s,
+1 HP a cada 15 s. Teto ou fim de chuva reinicia exposição; calor não reinicia.
+Após dano, espera configurável padrão de 6 s; em segurança, regeneração de 1/3 s.
+Fome/sede zeradas e combate também suspendem regeneração. Morte não regenera.
+As regras novas prevalecem conforme o prompt de auditoria final armazenado em Docs.
 
-Compatibility funciona com OpenGL. Densidade/alcance da grama, sombras e chuva
-variam por qualidade. Não existem recursos silenciosamente apresentados como
-implementados: SSR, GI, volumetria, oceanos navegáveis e terreno editável ainda
-faltam. A água atual é visual, sem natação.
-Seu shader tem ondas e usa reflexão de ambiente estática em Alto/Ultra;
-isso não é reflexão planar do cenário em tempo real.
+## Apresentação e orçamento
+
+Compatibility, sem SSR/GI/volumetria afirmados. Nuvens e água usam shaders; luzes
+locais, sombras, partículas, distância e MultiMesh têm orçamento por perfil.
+Som e efeitos não modificam regras climáticas. IA reduz decisões/animação longe
+dos jogadores. Não há streaming nem mundo volumétrico/terreno editável.
+
+Voz: AudioStreamMicrophone → AudioEffectCapture → mono 16 kHz → pacotes IMA ADPCM
+independentes de 40 ms/325 bytes → ENet não confiável, canal 3 → validação de
+remetente/canal/destinatários → decode → fila de até cinco pacotes →
+AudioStreamGenerator. Proximidade 30 m, salas autorizadas com áudio remoto.
+Sequências duplicadas são descartadas e lacunas curtas recebem silêncio.
+Opus, cancelamento de eco, supressão de ruído, segurança do transporte e testes de
+microfones físicos continuam pendentes. Não é uma implementação Opus simulada.
 
 ## Persistência e entrega
 
-Schema v2 armazena jogadores, inventários, HP, intervalo de regeneração,
-exposição, cortes, construções, relógio e estado/RNG climático. O slot mais novo
-válido é carregado; corrupção de um slot permite recuperar o anterior.
-O lock é conservador e não é roubado automaticamente após crash. Não se deve
-confundir checksum com autenticidade contra um administrador que edita o save.
+Snapshots alternados não são banco transacional/WAL. Um slot válido anterior
+permanece durante substituição do outro; checksum/schema recusam corrupção.
+Lock de diretório impede dois processos escritores. Crash deixa lock para
+recuperação explícita, sem apagar estado possivelmente ativo. Saves anteriores
+migram para v3. Não há garantia de fsync/durabilidade por queda de energia.
 
-As exportações usam presets Windows/Linux x64 e Linux dedicado. O empacotador
-valida cabeçalhos PE/ELF, integridade ZIP e gera SHA256. NSIS instala por usuário
-e mantém os dados pessoais fora da pasta de instalação. A presença de um build
-Windows não comprova sua execução no Windows.
-
-## Fronteiras seguintes
-
-Persistência transacional com journal e recuperação automática segura; perfis de
-rede autenticados para Internet; protocolo incremental por relevância; testes
-de carga e latência. Depois, sobrevivência alimentar, caça/IA, mineração,
-combate/armaduras, construção modular, tribos/diplomacia e streaming por biomas.
-Não há módulos vazios contabilizados como funcionalidades.
+`Tools/build.py` importa, testa, exporta três plataformas e grava hashes de fontes
+runtime/binários. `package.py` exige esse recibo, valida executáveis e ZIPs, inclui
+licenças e cria manifesto SHA256. NSIS é per-user Unicode, com seis idiomas.
+Fonte Noto CJK é redistribuída sob SIL OFL, com licença incluída. Binário Windows
+compilado no Linux precisa de testes Windows reais antes de publicação.

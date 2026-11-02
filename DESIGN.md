@@ -8,8 +8,9 @@ sem necessidade demonstrada. `PROGRESS.md` distingue implementação de intenç�
 ## Regras obrigatórias
 
 - Todos os jogadores têm no máximo 100 HP, independentemente da tribo.
-- Regeneração: 1 HP a cada 3 segundos completos sem dano; qualquer novo dano
-  reinicia o intervalo. Não modificar essa regra sem autorização do criador.
+- Regeneração conforme auditoria final: espera padrão configurável de 6 segundos
+  após dano, depois 1 HP a cada 3 segundos em condição segura. Suspender em
+  combate, privação ou chuva nociva a partir de 40 segundos; teto interrompe a exposição.
 - Chuva: 40 segundos completos iniciais sem dano. Primeiro dano em 55 segundos,
   depois 1 HP a cada 15 segundos contínuos: 70/85/100 e 17 HP brutos aos 300 s.
   Intensidade não modifica a taxa. O servidor controla o tempo e o dano.
@@ -18,12 +19,12 @@ sem necessidade demonstrada. `PROGRESS.md` distingue implementação de intenç�
 - Dia padrão de 30 minutos reais, noite de 15; servidor deve avançar sem jogadores
   enquanto o processo estiver ativo. Durações deverão ser configuráveis pelo admin.
 - Animais comuns: 5–10 HP por ataque. Especiais perigosos podem raramente atingir
-  20 HP, nunca mais de 20 em um golpe. Sistema ainda não implementado.
+  20 HP, nunca mais de 20 em um golpe. Implementação inicial: consulte PROGRESS.md.
 - Espadas: aproximadamente 10–35 HP por golpe conforme categoria/material;
   alcance, cooldown, resistência, armadura e dano validados no servidor.
 - Sem dano entre membros da mesma tribo. Saída voluntária ou expulsão ativa
   proteção bidirecional de 5 minutos apenas contra a antiga tribo, persistida
-  em desconexão/reconexão. Não afeta outras tribos. Sistema ainda não implementado.
+  em desconexão/reconexão. Não afeta outras tribos. Implementação inicial: consulte PROGRESS.md.
 - Romper aliança deve avisar globalmente e bloquear hostilidades entre as partes
   por 1 hora. Sistema ainda não implementado.
 
@@ -56,7 +57,7 @@ essa leitura com gráficos reduzidos. Efeitos mais caros devem ser configurávei
 11. Expandir mundo por seed, regiões e biomas: continente cercado pelo mar,
     florestas/campos/montanhas/vales/praias/pântanos/rios/lagos/cachoeiras/cavernas/
     ruínas/minas/ilhas. Barcos e jangadas. Modificações determinísticas persistidas.
-12. Interface funcional PT-BR/EN para os sistemas implementados; acessibilidade
+12. Interface funcional PT-BR/EN/ES/FR/DE/JA para os sistemas implementados; acessibilidade
     e controles remapeáveis. Não criar telas que simulem funcionalidades ausentes.
 13. Streaming, LOD, instancing, occlusion, pooling, IA por distância, limites de
     luzes, colisões, CPU/GPU/memória e rede. Referência: Ryzen 5 4600G/16GB/1080p,
@@ -69,3 +70,7 @@ essa leitura com gráficos reduzidos. Efeitos mais caros devem ser configurávei
 Referências de escala: continente inicial planejado de cerca de 12 × 12 km,
 5–6 tribos com territórios extensos e até 100 jogadores simultâneos configuráveis.
 Essas são metas a validar, não capacidades comprovadas da versão atual.
+
+Os quatro prompts posteriores estão preservados integralmente em Docs/REQUEST_*.md.
+A auditoria final tem precedência em regras de segurança da regeneração e nos
+critérios que impedem declarar 1.0 sem concluir e validar todos os itens obrigatórios.
