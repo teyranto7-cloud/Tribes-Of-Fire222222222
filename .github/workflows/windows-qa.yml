@@ -1,0 +1,41 @@
+name: Windows installer and runtime
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Downloads/**'
+      - 'Tools/Test-Windows.ps1'
+      - '.github/workflows/windows-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out project and packaged game
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Verify packaged installer checksum
+        shell: pwsh
+        run: |
+          $manifest = Get-Content -Raw 'Downloads/0.3.0-dev/manifest.json' | ConvertFrom-Json
+          $artifact = @($manifest.artifacts | Where-Object { $_.name -eq 'TribesOfFire-0.3.0-dev-Windows-Setup.exe' })
+          if ($artifact.Count -ne 1) { throw 'Installer missing from manifest.' }
+          $file = Join-Path 'Downloads/0.3.0-dev' $artifact[0].name
+          if ((Get-FileHash -Algorithm SHA256 $file).Hash.ToLowerInvariant() -ne $artifact[0].sha256) { throw 'Installer checksum mismatch.' }
+      - name: Install, run headless, restore, reinstall and uninstall on Windows
+        shell: pwsh
+        run: |
+          ./Tools/Test-Windows.ps1 -Installer 'Downloads/0.3.0-dev/TribesOfFire-0.3.0-dev-Windows-Setup.exe' -OutputDirectory (Join-Path $env:RUNNER_TEMP 'Tribes-QA') -Headless
+      - name: Publish native Windows test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: windows-native-results
+          path: ${{ runner.temp }}/Tribes-QA/
+          if-no-files-found: warn
+          retention-days: 14

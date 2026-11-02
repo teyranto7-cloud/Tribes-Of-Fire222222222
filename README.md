@@ -191,3 +191,17 @@ Logs técnicos de inicialização e salvamento em `user://logs/`; não gravam co
 áudio ou tokens. Arquitetura em [ARCHITECTURE.md](ARCHITECTURE.md), critérios e
 pendências em [Docs/AUDIT.md](Docs/AUDIT.md), roteiro manual em
 [Tests/MANUAL.md](Tests/MANUAL.md).
+
+## Verificação automática em Windows
+
+O workflow [Windows installer and runtime](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/workflows/windows-qa.yml)
+usa um runner Windows limpo para conferir o SHA256, instalar o pacote, verificar
+atalhos, iniciar o jogo sem interface gráfica, validar snapshots e reiniciar o
+servidor, reinstalar a mesma versão e desinstalar preservando dados. Os relatórios
+JSON/CSV e logs são publicados como artefato da execução. Consulte o resultado
+real em Actions; a existência do workflow não significa que ele passou.
+
+O modo headless não valida renderização, áudio físico, instalação interativa,
+Windows 10/11 em máquinas de jogadores ou desempenho. Esses testes continuam no
+roteiro manual. Para validar graficamente em uma conta Windows de teste, execute
+Tools/Test-Windows.ps1 sem a opção -Headless.
