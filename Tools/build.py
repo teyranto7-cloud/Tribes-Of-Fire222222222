@@ -11,6 +11,8 @@ import re
 import shutil
 import subprocess
 import sys
+from version import file_version
+from source_manifest import private_path
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,7 +56,7 @@ def source_signature() -> str:
         dirs[:] = sorted(name for name in dirs if name not in excluded)
         for name in sorted(files):
             path = Path(directory) / name
-            if name.endswith('.md') or name.startswith('.'):
+            if name.endswith('.md') or name.startswith('.') or private_path(path.relative_to(ROOT).as_posix()):
                 continue
             if path.is_symlink():
                 raise SystemExit(f'Unexpected application symlink: {path}')
@@ -81,6 +83,11 @@ def main() -> None:
     if engine is None:
         raise SystemExit('Godot not found; use --godot /path/to/editor')
     env = runtime_environment()
+    presets = ROOT / "export_presets.cfg"
+    if presets.exists():
+        content = presets.read_text(encoding="utf-8")
+        updated = re.sub(r'(application/(?:file_version|product_version)=)"[^"\n]*"', lambda match: match[1] + '"' + file_version(ROOT) + '"', content)
+        if updated != content: presets.write_text(updated, encoding="utf-8")
     version = subprocess.run([engine, '--version'], env=env, check=True,
                              text=True, stdout=subprocess.PIPE).stdout.strip()
     match = re.search(r'(\d+)\.(\d+)\.(\d+)', version)

@@ -9,6 +9,10 @@ const SPECIES := {
 	"wolf": {"hp": 60, "speed": 4.0, "scale": 0.85, "damage": 10, "range": 1.7, "color": "#7e8886", "loot": {"raw_meat": 2, "leather": 2, "bone": 1}},
 	"bear": {"hp": 150, "speed": 2.8, "scale": 1.35, "damage": 10, "range": 2.2, "color": "#5b4536", "loot": {"raw_meat": 5, "leather": 4, "bone": 2}}
 }
+var owner_key: String = ""
+var loyalty: float = 0.0
+var provoked_until: float = 0.0
+var respawn_at: float = 0.0
 var animal_id: int = 0
 var species: String = "deer"
 var authoritative: bool = true
@@ -68,8 +72,7 @@ func setup(id: int, kind: String, at: Vector3, authority: bool) -> void:
 	add_child(sound)
 
 func ellipsoid(parent: Node3D, at: Vector3, size: Vector3, color: Color) -> MeshInstance3D:
-	var mesh := Shapes.sphere(parent, 0.5, at, color)
-	mesh.scale = size
+	var mesh := Shapes.sculpted(parent, at, size, color, "body", animal_id)
 	return mesh
 
 func _build_model(size: float) -> void:
@@ -158,8 +161,9 @@ func simulate(delta: float) -> void:
 	if intent.length_squared() > 0.01:
 		rotation.y = lerp_angle(rotation.y, atan2(-intent.x, -intent.z), minf(1, delta * 7))
 	move_and_slide()
-	position.x = clampf(position.x, -59, 59)
-	position.z = clampf(position.z, -59, 59)
+	var extent: float = get_parent().world.half_extent() - 1
+	position.x = clampf(position.x, -extent, extent)
+	position.z = clampf(position.z, -extent, extent)
 
 func receive_damage(amount: int) -> bool:
 	if not authoritative or amount <= 0 or hp <= 0:
@@ -177,7 +181,7 @@ func receive_damage(amount: int) -> bool:
 func capture() -> Dictionary:
 	return {"id": animal_id, "species": species, "position": [position.x, position.y, position.z],
 		"home": [home.x, home.y, home.z], "yaw": rotation.y, "hp": hp,
-		"harvested": harvested, "state": state, "age": age, "attack_left": attack_left}
+		"harvested": harvested, "state": state, "age": age, "attack_left": attack_left, "owner": owner_key, "loyalty": loyalty, "respawn_at": respawn_at}
 
 func apply_snapshot(data: Dictionary) -> void:
 	var p: Array = data["position"]
@@ -189,6 +193,9 @@ func apply_snapshot(data: Dictionary) -> void:
 	hp = int(data["hp"])
 	harvested = bool(data["harvested"])
 	state = str(data["state"])
+	owner_key = str(data.get("owner",""))
+	loyalty = clampf(float(data.get("loyalty",0)),0,100)
+	respawn_at = float(data.get("respawn_at",0))
 	attack_left = float(data["attack_left"])
 	var h: Array = data["home"]
 	home = Vector3(h[0], h[1], h[2])

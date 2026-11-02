@@ -1,5 +1,6 @@
 extends RefCounted
 const Catalog = preload("res://Items/Catalog.gd")
+const Balance = preload("res://Game/Balance.gd")
 
 const COST := 8
 const SHELTER_COST := 12
@@ -44,17 +45,13 @@ func consume(item: String, amount: int) -> bool:
 	return true
 
 func craft(item: String, cost: int) -> bool:
-	if not can_add(item, 1) or cost <= 0 or count("wood") < cost:
-		return false
-	items["wood"] = count("wood") - cost
-	items[item] = count(item) + 1
-	return true
+	return cost > 0 and transact({"wood": cost}, {item: 1})
 
 func craft_fire() -> bool:
-	return craft("campfire", COST)
+	return transact(Catalog.recipe("campfire")["cost"], {"campfire": 1})
 
 func craft_shelter() -> bool:
-	return craft("shelter", SHELTER_COST)
+	return transact(Catalog.recipe("shelter")["cost"], {"shelter": 1})
 
 func restore(data: Dictionary) -> void:
 	if data.has("slots") and valid_state(data):
@@ -233,7 +230,7 @@ func add_many(rewards: Dictionary) -> bool:
 func craft_recipe(id: String, stations: Array = []) -> bool:
 	if not Catalog.RECIPES.has(id):
 		return false
-	var recipe: Dictionary = Catalog.RECIPES[id]
+	var recipe: Dictionary = Catalog.recipe(id)
 	if recipe["station"] != "hand" and not recipe["station"] in stations:
 		return false
 	return transact(recipe["cost"], {id: 1})

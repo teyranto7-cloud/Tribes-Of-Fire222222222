@@ -4,4 +4,12 @@ dist/
 .local/
 __pycache__/
 export_credentials.cfg
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
 *.tmp

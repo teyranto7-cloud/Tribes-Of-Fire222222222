@@ -34,76 +34,15 @@ static func apply(player, data: Dictionary) -> void:
 		player.remove_child(old)
 		old.queue_free()
 	player._materials.clear()
-	player._build_avatar()
+	preload("res://Character/Model.gd").build(player, data)
 	player.appearance = data.duplicate(true)
-	var skin: Color = SKIN[int(data["skin"])]
-	player._materials["skin"].albedo_color = skin
-	player._materials["skin_shadow"].albedo_color = skin.darkened(0.18)
-	player._materials["hair"].albedo_color = HAIR[int(data["hair_color"])]
-	player._materials["hair_highlight"].albedo_color = HAIR[int(data["hair_color"])].lightened(0.1)
-	player._materials["eye"].albedo_color = EYES[int(data["eye_color"])]
-	player.avatar.scale = Vector3(1.15 * float(data["volume"]), float(data["height"]) / 1.98, 1.07)
-	player.torso.scale.x = float(data["shoulders"]) * (0.94 if int(data["body"]) == 1 else 1.0)
-	player.head.scale = Vector3(float(data["face"]) * 1.13, 1.08, 1.04)
-	var garments := ShaderMaterial.new()
-	garments.shader = preload("res://Assets/Shaders/hide.gdshader")
-	garments.set_shader_parameter("style", int(data["clothing"]))
-	for mesh in player.torso.find_children("*", "MeshInstance3D", true, false):
-		if mesh.material_override == player._materials["tunic"]:
-			mesh.material_override = garments
-	for mesh in player.head.get_children():
-		if not mesh is MeshInstance3D:
-			continue
-		if mesh.material_override == player._materials["eye_white"] or mesh.material_override == player._materials["eye"]:
-			mesh.scale *= Vector3.ONE * float(data["eye_size"])
-			mesh.scale.y *= [1.0, 0.8, 1.2][int(data["eyes"])]
-			mesh.position.x *= float(data["eye_spacing"])
-		elif mesh.material_override in [player._materials["hair"], player._materials["hair_highlight"]] and mesh.position.y > 0.08:
-			mesh.hide()
-		elif absf(mesh.position.x) > 0.18:
-			mesh.scale *= float(data["ears"])
-		elif mesh.material_override == player._materials["skin"] and mesh.position.z < -0.17:
-			mesh.scale *= float(data["nose"])
-		elif mesh.material_override == player._materials["skin_shadow"]:
-			mesh.scale.x *= float(data["mouth"])
-	var hair := Node3D.new()
-	hair.name = "HairStyle"
-	player.head.add_child(hair)
-	var hair_color: Color = HAIR[int(data["hair_color"])]
-	var style := int(data["hair"])
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 102 + style
-	for i in range(9 if style != 6 else 15):
-		var angle := float(i) / 9 * TAU
-		var location := Vector3(sin(angle) * 0.14, 0.15 + rng.randf() * 0.05, cos(angle) * 0.1)
-		var lock := Shapes.sphere(hair, 0.10 if style != 6 else 0.07, location, hair_color.lightened(rng.randf() * 0.06))
-		lock.scale = Vector3(0.85, [1.0, 1.5, 2.4, 1.1, 1.8, 1.1, 1.0, 1.9, 2.5][style], 0.85)
-		lock.rotation.z = sin(angle) * 0.6
-		if style in [2, 4, 7, 8]:
-			lock.position.z += 0.08
-			lock.position.y -= 0.05
-		if style in [3, 4] and i > 4:
-			lock.position = Vector3(0, 0.15 - (i - 5) * 0.08, 0.18)
-		if style == 5 and absf(location.x) > 0.1:
-			lock.hide()
-	if int(data["beard"]) > 0:
-		var beard := Shapes.sphere(player.head, 0.14, Vector3(0, -0.12, -0.10), hair_color)
-		beard.scale = Vector3(0.9 if int(data["beard"]) != 4 else 0.45, 0.5 + int(data["beard"]) * 0.17, 0.9)
-		if int(data["beard"]) == 5:
-			beard.position.y = -0.06
-			beard.scale = Vector3(0.9, 0.16, 0.5)
-	# Original modeled knots, irregular hem and ties: not just a flat body texture.
-	for i in range(7):
-		var angle := float(i) / 7 * TAU
-		var flap := Shapes.sphere(player.torso, 0.09, Vector3(sin(angle) * 0.23, -0.16, cos(angle) * 0.15), Color("#aa8350"))
-		flap.scale = Vector3(0.8, 1.25 + sin(i * 4) * 0.25, 0.35)
-		flap.material_override = garments
 	if player.label != null:
 		player.label.text = data["name"]
 		player.label.font = preload("res://Assets/Fonts/NotoSansCJK-Regular.ttc")
 		player.label.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	var rig = preload("res://Character/Rig.gd").new()
 	rig.name = "CharacterRig"
+	player.rig = rig
 	rig.setup(player)
 	player.avatar.add_child(rig)
 	player.set_equipment(player.visual_equipment, true)

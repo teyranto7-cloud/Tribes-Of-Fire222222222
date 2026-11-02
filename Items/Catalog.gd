@@ -1,4 +1,5 @@
 extends RefCounted
+const Balance = preload("res://Game/Balance.gd")
 ## Stable item identifiers shared by authority, UI and save migration.
 const RESOURCES := ["wood", "stone", "fiber", "coal", "copper_ore", "tin_ore", "iron_ore", "silver_ore", "gold_ore", "sulfur", "rare_ore", "copper_ingot", "bronze_ingot", "iron_ingot", "steel_ingot", "raw_meat", "cooked_meat", "berries", "water", "leather", "bone", "arrow"]
 const WEAPONS := {"axe": 10, "club": 10, "spear": 15, "stone_sword": 12, "copper_sword": 17, "bronze_sword": 22, "iron_sword": 28, "steel_sword": 35, "bow": 16, "pickaxe": 5, "iron_pickaxe": 8}
@@ -27,9 +28,11 @@ static func known(id: String) -> bool:
 static func get_item(id: String) -> Dictionary:
 	return {"id": id, "stack": 1 if WEAPONS.has(id) or ARMOR.has(id) or id == "shield" else 99, "durability": 100} if known(id) else {}
 static func damage(id: String) -> int:
-	return int(WEAPONS.get(id, 0))
+	return int(Balance.section("weapons").get(id, WEAPONS.get(id, 0)))
 static func armor(id: String) -> float:
-	return float(ARMOR.get(id, 0.0))
+	return float(Balance.section("armor").get(id, ARMOR.get(id, 0.0)))
+static func recipe(id: String) -> Dictionary:
+	return Balance.section("recipes").get(id, RECIPES.get(id, {})).duplicate(true)
 static func display_name(id: String) -> String:
 	var text := id.replace("_", " ").to_lower()
 	if text.is_empty():

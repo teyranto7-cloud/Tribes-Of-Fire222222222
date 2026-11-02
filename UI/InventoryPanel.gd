@@ -23,7 +23,7 @@ func configure(value, _language: int = 0) -> void:
 	detail = Label.new()
 	detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(detail)
-	for action in ["Equip", "Unequip", "Eat", "Drop"]:
+	for action in ["Equip", "Unequip", "Eat", "Drop", "Repair"]:
 		var button := Button.new()
 		button.text = tr(action)
 		button.pressed.connect(func(): _action(action))
@@ -34,7 +34,7 @@ func configure(value, _language: int = 0) -> void:
 	for id in Catalog.RECIPES:
 		var recipe_id: String = id
 		var button := Button.new()
-		var recipe: Dictionary = Catalog.RECIPES[id]
+		var recipe: Dictionary = Catalog.recipe(id)
 		button.text = tr("Crafting") + ": " + item_name(id) + "  " + cost_text(recipe["cost"]) + "  [" + tr(str(recipe["station"]).capitalize()) + "]"
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		button.pressed.connect(func(): game.request_command("craft", {"recipe": recipe_id}))
@@ -45,11 +45,11 @@ func configure(value, _language: int = 0) -> void:
 		button.text = tr("Equip") + ": " + tr(entry[0])
 		button.pressed.connect(func(): game.tool = value_tool; game.hud.show_panel(""))
 		add_child(button)
-	for kind in ["workbench", "furnace"]:
+	for kind in ["foundation","floor","wall","window","door","roof","stairs","fence","bed","chest","garden","workbench","furnace"]:
 		var piece: String = kind
 		var button := Button.new()
-		button.text = tr("Build") + ": " + tr(kind.capitalize()) + " • " + cost_text({"wood": 12} if kind == "workbench" else {"stone": 12, "wood": 4})
-		button.pressed.connect(func(): game.request_command("build", {"piece": piece}))
+		button.text = tr("Build") + ": " + tr(kind.capitalize()) + " • " + cost_text(preload("res://Game/Balance.gd").section("building")["costs"][kind])
+		button.pressed.connect(func(): game.select_building(piece))
 		add_child(button)
 	_refresh(true)
 func item_name(id: String) -> String:
@@ -64,6 +64,7 @@ func _process(_delta: float) -> void:
 func _action(action: String) -> void:
 	var slot: Dictionary = game.inventory.serialize()["slots"][selected]
 	match action:
+		"Repair": game.request_command("repair", {"slot": selected})
 		"Equip":
 			game.request_command("equip", {"slot": selected})
 			game.tool = 1

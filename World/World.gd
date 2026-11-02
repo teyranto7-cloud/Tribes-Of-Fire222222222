@@ -6,10 +6,31 @@ const FireScript = preload("res://Building/Campfire.gd")
 const ShelterScript = preload("res://Building/Shelter.gd")
 const Foliage = preload("res://Assets/Shaders/foliage.gdshader")
 const WaterShader = preload("res://Assets/Shaders/water.gdshader")
+const Terrain = preload("res://World/Terrain.gd")
+const Piece = preload("res://Building/Piece.gd")
+const Balance = preload("res://Game/Balance.gd")
 const SEED := 1337
 const TREE_COUNT := 160
 const LIMIT := 60.0
 
+var world_description: Dictionary = Terrain.LEGACY.duplicate(true)
+var sampler = Terrain.new()
+var water_level: float = -2.9
+var structures: Array = []
+var resource_timers: Dictionary = {}
+var _cut_registry: Dictionary = {}
+var _chunks: Dictionary = {}
+var _chunk_records: Dictionary = {}
+var _tree_nodes: Dictionary = {}
+var _wanted: Dictionary = {}
+var _focus_positions: Array = [Vector3.ZERO]
+var _ready_arrays: Array = []
+var _job: int = -1
+var _job_key := Vector2i.ZERO
+var _generation: int = 0
+var _mutex := Mutex.new()
+var _poi_nodes: Array = []
+var _grass_center := Vector3.ZERO
 var trees: Array = []
 var fires: Array[Node3D] = []
 var shelters: Array[Node3D] = []
@@ -96,27 +117,16 @@ func cancel_generation() -> void:
 	generation_cancelled = true
 
 func make_chunk(x0: int, z0: int) -> void:
-	var surface := SurfaceTool.new()
-	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for z in range(8):
-		for x in range(8):
-			var a := Vector2(x0 + x * 2, z0 + z * 2)
-			var b := a + Vector2(2, 0)
-			var c := a + Vector2(0, 2)
-			var d := a + Vector2(2, 2)
-			for p in [a, b, c, b, d, c]:
-				var h := height_at(p.x, p.y)
-				var dx := (height_at(p.x + 0.1, p.y) - height_at(p.x - 0.1, p.y)) / 0.2
-				var dz := (height_at(p.x, p.y + 0.1) - height_at(p.x, p.y - 0.1)) / 0.2
-				surface.set_normal(Vector3(-dx, 1, -dz).normalized())
-				var color := Color("#356744").lerp(Color("#668243"), clampf((h + 3.0) / 7.0, 0, 1))
-				if h < -2.1:
-					color = color.lerp(Color("#b7a574"), clampf((-h - 2.1) * 2, 0, 1))
-				if Vector2(p.x, p.y).length() < 5.0:
-					color = color.lerp(Color("#94845a"), 0.4)
-				surface.set_color(color)
-				surface.add_vertex(Vector3(p.x, h, p.y))
-	var mesh := surface.commit()
+	_install_chunk(Vector2i(x0 / 16, z0 / 16), sampler.chunk_arrays(x0, z0))
+
+func _install_chunk(key: Vector2i, arrays: Array) -> void:
+	if _chunks.has(key): return
+	var root := Node3D.new()
+	root.name = "Chunk_%d_%d" % [key.x, key.y]
+	add_child(root)
+	_chunks[key] = root
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var terrain := MeshInstance3D.new()
 	terrain.mesh = mesh
 	var mat := Shapes.material(Color.WHITE)
@@ -124,13 +134,14 @@ func make_chunk(x0: int, z0: int) -> void:
 	mat.vertex_color_is_srgb = true
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	terrain.material_override = mat
-	add_child(terrain)
+	root.add_child(terrain)
 	var ground := StaticBody3D.new()
 	ground.add_to_group("terrain")
-	add_child(ground)
+	root.add_child(ground)
 	var shape := mesh.create_trimesh_shape()
 	shape.backface_collision = true
 	Shapes.collider(ground, shape, Vector3.ZERO)
+	_spawn_chunk_trees(key)
 
 func setup_environment() -> void:
 	var node := WorldEnvironment.new()
@@ -184,6 +195,8 @@ func make_scenery() -> void:
 		rock.rotation.y = rng.randf() * TAU
 	var water := PlaneMesh.new()
 	water.size = Vector2(160, 160)
+	water.subdivide_width = 48
+	water.subdivide_depth = 48
 	water.subdivide_width = 32
 	water.subdivide_depth = 32
 	var lake := Shapes.mesh(self, water, Vector3(0, -2.9, 0), Color("#4a929a"))
@@ -208,11 +221,15 @@ func make_grass() -> void:
 	grass.multimesh.use_colors = true
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for direction in [0.0, PI * 0.5]:
-		var side := Vector3(cos(direction), 0, sin(direction)) * 0.16
-		for p in [-side, Vector3(0.07, 0.55, 0), side]:
+	for i in range(6):
+		var angle := i * 2.39996
+		var side := Vector3(cos(angle), 0, sin(angle)) * 0.055
+		var base := Vector3(sin(i * 3.1), 0, cos(i * 2.4)) * 0.12
+		var middle := base + Vector3(sin(angle) * 0.10, 0.22 + i * 0.022, cos(angle) * 0.10)
+		var tip := middle + Vector3(sin(angle) * 0.12, 0.18, cos(angle) * 0.12)
+		for vertex in [base-side, middle-side*0.65, base+side, base+side, middle-side*0.65, middle+side*0.65, middle-side*0.65, tip, middle+side*0.65]:
 			surface.set_normal(Vector3.UP)
-			surface.add_vertex(p)
+			surface.add_vertex(vertex)
 	grass.multimesh.mesh = surface.commit()
 	grass.multimesh.instance_count = 4200
 	grass_material = ShaderMaterial.new()
@@ -238,7 +255,7 @@ func illuminate(clock) -> void:
 	last_daylight = day
 	var hour: float = clock.hour()
 	var cloud := float(weather.get("cloud", 0))
-	var flash := float(weather.get("lightning", 0))
+	var flash := 0.0 if graphics_config.get("reduced_flash",false) else float(weather.get("lightning", 0))
 	sun.rotation_degrees = Vector3(-(hour - 6.0) * 15.0, -25, 0)
 	moon.rotation_degrees = sun.rotation_degrees + Vector3(180, 0, 0)
 	sun.light_energy = day * 0.85 * (1 - cloud * 0.62) + flash * 3.0
@@ -326,23 +343,26 @@ func nearest_tree(player: Node3D):
 	var distance := 3.5
 	var forward := -player.global_basis.z
 	for tree in trees:
-		if tree.felled:
-			continue
+		if tree.felled: continue
 		var offset: Vector3 = tree.global_position - player.global_position
+		if absf(offset.y) > 2: continue
 		offset.y = 0
 		var length := offset.length()
-		if length < distance and length > 0.01 and offset.normalized().dot(forward) > 0.35:
-			distance = length
-			result = tree
+		if length >= distance or length <= 0.01 or offset.normalized().dot(forward) <= 0.35: continue
+		var query := PhysicsRayQueryParameters3D.create(player.global_position + Vector3.UP, tree.global_position + Vector3.UP, 1, [player.get_rid(), tree.get_rid()])
+		if not get_world_3d().direct_space_state.intersect_ray(query).is_empty(): continue
+		distance = length
+		result = tree
 	return result
 
-func placement(player: CharacterBody3D, kind: String = "campfire") -> Dictionary:
+func placement(player: CharacterBody3D, kind: String = "campfire", rotation_value: int = 0) -> Dictionary:
+	if kind in Piece.KINDS: return _modular_placement(player, kind, rotation_value)
 	var shelter := kind == "shelter"
 	if (shelters.size() >= 16 if shelter else fires.size() >= 32):
 		return {"valid": false, "position": player.global_position}
 	var target := player.global_position - player.global_basis.z * (5.5 if shelter else 3.0)
-	target.x = clampf(target.x, -LIMIT + 3, LIMIT - 3)
-	target.z = clampf(target.z, -LIMIT + 3, LIMIT - 3)
+	target.x = clampf(target.x, -half_extent() + 5, half_extent() - 5)
+	target.z = clampf(target.z, -half_extent() + 5, half_extent() - 5)
 	var query := PhysicsRayQueryParameters3D.create(target + Vector3.UP * 6, target - Vector3.UP * 9, 1, [player.get_rid()])
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	if hit.is_empty():
@@ -397,35 +417,51 @@ func is_sheltered(player: Node3D) -> bool:
 	if player is CollisionObject3D:
 		query.exclude = [player.get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	return not hit.is_empty() and hit["collider"].is_in_group("rain_roof")
+	return not hit.is_empty()
 
 func warmth_at(at: Vector3) -> bool:
 	for fire in fires:
-		if fire.global_position.distance_to(at) < 4.0:
-			return true
+		if not fire.lit or fire.fuel <= 0 or fire.global_position.distance_to(at) >= Balance.number("fire", "heat_radius", 4): continue
+		var query := PhysicsRayQueryParameters3D.create(at + Vector3.UP, fire.global_position + Vector3.UP, 1)
+		if get_world_3d().direct_space_state.intersect_ray(query).is_empty(): return true
 	return false
 
 func restore(data: Dictionary) -> void:
+	_cut_registry.clear()
+	for id in data.get("cut", []): _cut_registry[int(id)] = true
+	resource_timers = data.get("resource_timers", {}).duplicate(true)
 	for tree in trees:
-		tree.restore_cut(tree.tree_id in data.get("cut", []))
-	for fire in fires:
-		remove_child(fire)
-		fire.queue_free()
-	fires.clear()
-	for shelter in shelters:
-		remove_child(shelter)
-		shelter.queue_free()
-	shelters.clear()
-	for p in data.get("fires", []):
-		add_fire(Vector3(p[0], p[1], p[2]))
-	for p in data.get("shelters", []):
-		add_shelter(Vector3(p[0], p[1], p[2]))
+		var cut: bool = _cut_registry.has(tree.tree_id)
+		if cut != tree.felled: tree.set_felled(cut, cut)
+	_restore_points(fires, data.get("fires", []), "fire")
+	_restore_points(shelters, data.get("shelters", []), "shelter")
+	for state in data.get("fire_states", []):
+		var p: Array = state["position"]
+		for fire in fires:
+			if fire.position.distance_to(Vector3(p[0], p[1], p[2])) < 0.05: fire.restore_state(state)
+	restore_buildings(data.get("structures", []))
+
+func _restore_points(nodes: Array, positions: Array, kind: String) -> void:
+	for node in nodes.duplicate():
+		var found := false
+		for p in positions:
+			if node.position.distance_to(Vector3(p[0], p[1], p[2])) < 0.01: found = true
+		if not found:
+			nodes.erase(node); remove_child(node); node.queue_free()
+	for p in positions:
+		var at := Vector3(p[0], p[1], p[2])
+		var found := false
+		for node in nodes:
+			if node.position.distance_to(at) < 0.01: found = true
+		if not found:
+			if kind == "fire": add_fire(at)
+			else: add_shelter(at)
 
 func cut_ids() -> Array:
-	var ids: Array = []
 	for tree in trees:
-		if tree.felled:
-			ids.append(tree.tree_id)
+		if tree.felled: _cut_registry[tree.tree_id] = true
+	var ids: Array = _cut_registry.keys()
+	ids.sort()
 	return ids
 
 func fire_positions() -> Array:
@@ -521,3 +557,227 @@ func rain_stop_at(x: float, z: float, top: float) -> float:
 	var query := PhysicsRayQueryParameters3D.create(Vector3(x, top, z), Vector3(x, -15, z), 1)
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	return float(hit["position"].y) + 0.2 if not hit.is_empty() else -8.0
+
+func descriptor() -> Dictionary:
+	return world_description.duplicate(true)
+func half_extent() -> float:
+	return 60.0 if int(world_description["generator"]) == 0 else float(world_description["size"]) * 0.5
+func contains_position(at: Vector3) -> bool:
+	return absf(at.x) <= half_extent() and absf(at.z) <= half_extent()
+func terrain_height(x: float, z: float) -> float:
+	return sampler.height(x, z)
+func biome_at(x: float, z: float) -> String:
+	return sampler.biome(x, z)
+
+func configure_world(description: Dictionary) -> void:
+	if description == world_description: return
+	_generation += 1
+	world_description = description.duplicate(true)
+	sampler = Terrain.new(description)
+	for node in _chunks.values(): remove_child(node); node.queue_free()
+	_chunks.clear()
+	for tree in trees: remove_child(tree); tree.queue_free()
+	trees.clear(); _tree_nodes.clear(); _chunk_records.clear(); _cut_registry.clear()
+	for node in _poi_nodes: remove_child(node); node.queue_free()
+	_poi_nodes.clear()
+	_build_tree_catalog()
+	for z in range(-1, 2):
+		for x in range(-1, 2): make_chunk(x * 16, z * 16)
+	if int(description["generator"]) == 0:
+		for z in range(-4, 4):
+			for x in range(-4, 4): make_chunk(x * 16, z * 16)
+	else: _make_points_of_interest()
+	_place_grass(Vector3.ZERO)
+	for child in get_children():
+		if child is MeshInstance3D and child.mesh is PlaneMesh and child != cloud_mesh:
+			child.mesh.size = Vector2(480, 480)
+	update_streaming([Vector3.ZERO])
+
+func _build_tree_catalog() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(world_description["seed"])
+	var legacy: bool = int(world_description["generator"]) == 0
+	var count := 160 if legacy else 800
+	var extent := 58.0 if legacy else 145.0
+	for id in range(count):
+		var at := Vector3(rng.randf_range(-extent, extent), 0, rng.randf_range(-extent, extent))
+		while Vector2(at.x, at.z).length() < 7: at = Vector3(rng.randf_range(-extent, extent), 0, rng.randf_range(-extent, extent))
+		if id < 3: at = [Vector3(3,0,-3),Vector3(-3,0,-3),Vector3(0,0,-6)][id]
+		at.y = terrain_height(at.x, at.z)
+		var size := rng.randf_range(0.85,1.35)
+		var tint := Color("#34724c").lerp(Color("#729755"), rng.randf())
+		if not legacy and at.y < water_level + 0.6: continue
+		var biome := biome_at(at.x, at.z)
+		var species: String = "oak" if legacy else ("palm" if biome == "beach" else ("pine" if biome in ["mountains", "tundra"] else ("burnt" if biome == "volcanic" else ["oak","pine","birch","fruit","fallen"][id % 5])))
+		var key := Vector2i(floori(at.x/16), floori(at.z/16))
+		if not _chunk_records.has(key): _chunk_records[key] = []
+		_chunk_records[key].append({"id": id,"position": at,"size": size,"tint": tint,"species": species})
+
+func _spawn_chunk_trees(key: Vector2i) -> void:
+	for record in _chunk_records.get(key, []):
+		if _tree_nodes.has(record["id"]): continue
+		var tree = TreeScript.new()
+		add_child(tree)
+		tree.setup(record["id"], record["position"], record["size"], record["tint"], record["species"])
+		tree.restore_cut(_cut_registry.has(record["id"]))
+		trees.append(tree); _tree_nodes[record["id"]] = tree
+	trees.sort_custom(func(a,b): return a.tree_id < b.tree_id)
+
+func update_streaming(foci: Array) -> void:
+	if int(world_description["generator"]) == 0: return
+	_wanted.clear()
+	_focus_positions = foci.duplicate()
+	for focus in foci:
+		var center := Vector2i(floori(focus.x/16),floori(focus.z/16))
+		for z in range(-3,4):
+			for x in range(-3,4):
+				var key := center + Vector2i(x,z)
+				if key.x >= -10 and key.x < 10 and key.y >= -10 and key.y < 10: _wanted[key] = true
+	for key in _chunks.keys():
+		if _wanted.has(key): continue
+		var keep := false
+		for focus in foci:
+			if Vector2(key.x*16+8-focus.x,key.y*16+8-focus.z).length() < 88: keep = true
+		if keep: continue
+		var node: Node = _chunks[key]; remove_child(node); node.queue_free(); _chunks.erase(key)
+		for tree in trees.duplicate():
+			if Vector2i(floori(tree.position.x/16),floori(tree.position.z/16)) == key:
+				if tree.felled: _cut_registry[tree.tree_id] = true
+				_tree_nodes.erase(tree.tree_id); trees.erase(tree); remove_child(tree); tree.queue_free()
+	if not foci.is_empty() and grass != null and _grass_center.distance_to(foci[0]) > 24: _place_grass(foci[0])
+
+func _build_chunk_job(key: Vector2i, model, generation: int) -> void:
+	var arrays: Array = model.chunk_arrays(key.x*16,key.y*16)
+	_mutex.lock(); _ready_arrays.append({"key":key,"arrays":arrays,"generation":generation}); _mutex.unlock()
+
+func _process(_delta: float) -> void:
+	if _job >= 0 and WorkerThreadPool.is_task_completed(_job):
+		WorkerThreadPool.wait_for_task_completion(_job); _job = -1
+	_mutex.lock()
+	var completed := _ready_arrays.duplicate()
+	_ready_arrays.clear(); _mutex.unlock()
+	for record in completed:
+		if record["generation"] == _generation and _wanted.has(record["key"]): _install_chunk(record["key"],record["arrays"])
+	if _job < 0 and not generation_cancelled:
+		var missing: Array = _wanted.keys().filter(func(key): return not _chunks.has(key))
+		missing.sort_custom(func(a,b): return _stream_distance(a) < _stream_distance(b))
+		if not missing.is_empty():
+			var key: Vector2i = missing[0]
+			_job_key = key
+			_job = WorkerThreadPool.add_task(_build_chunk_job.bind(key,sampler,_generation))
+
+func _stream_distance(key: Vector2i) -> float:
+	var best := INF
+	for focus in _focus_positions:
+		best = minf(best, Vector2(key.x*16+8-focus.x,key.y*16+8-focus.z).length_squared())
+	return best
+func has_terrain_at(at: Vector3) -> bool:
+	return _chunks.has(Vector2i(floori(at.x/16),floori(at.z/16)))
+
+func _exit_tree() -> void:
+	if _job >= 0: WorkerThreadPool.wait_for_task_completion(_job)
+
+func _place_grass(center: Vector3) -> void:
+	if grass == null: return
+	_grass_center = center
+	var rng := RandomNumberGenerator.new(); rng.seed = int(world_description["seed"]) + 20 + floori(center.x/24)*107 + floori(center.z/24)*307
+	for i in range(4200):
+		var at := Vector3(center.x+rng.randf_range(-59,59),0,center.z+rng.randf_range(-59,59))
+		at.y = terrain_height(at.x,at.z)-0.02
+		var scale_value := rng.randf_range(0.5,1.4) if at.y > water_level+0.3 and contains_position(at) else 0.0
+		grass.multimesh.set_instance_transform(i,Transform3D(Basis(Vector3.UP,rng.randf()*TAU).scaled(Vector3.ONE*scale_value),at))
+
+func record_tree_cut(id: int) -> void:
+	_cut_registry[id] = true
+	resource_timers[str(id)] = Time.get_unix_time_from_system() + Balance.number("world","tree_regrow_seconds",900)
+
+func tick_world(delta: float, authoritative: bool, raining: bool) -> void:
+	if not authoritative: return
+	var now := Time.get_unix_time_from_system()
+	for id in resource_timers.keys():
+		if now >= float(resource_timers[id]):
+			resource_timers.erase(id); _cut_registry.erase(int(id))
+			if _tree_nodes.has(int(id)): _tree_nodes[int(id)].restore_cut(false)
+	for fire in fires: fire.advance(delta,raining,is_sheltered(fire))
+
+func fire_states() -> Array:
+	var result: Array = []
+	for fire in fires: result.append(fire.state())
+	return result
+
+func _modular_placement(player, kind: String, turn: int) -> Dictionary:
+	var target: Vector3 = player.position - player.global_basis.z*4
+	target.x = snappedf(target.x,2); target.z = snappedf(target.z,2)
+	target.y = terrain_height(target.x,target.z)
+	var valid: bool = contains_position(target) and target.y > water_level+0.2 and structures.size() < 512
+	for piece in structures:
+		if piece.kind == kind and piece.position.distance_to(target) < 1: valid = false
+	for tree in trees:
+		if not tree.felled and Vector2(tree.position.x-target.x,tree.position.z-target.z).length()<1.1: valid=false
+	var query := PhysicsRayQueryParameters3D.create(player.position+Vector3.UP*1.4,target+Vector3.UP*0.4,1,[player.get_rid()])
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if not hit.is_empty() and not hit["collider"].is_in_group("terrain") and not hit["collider"].is_in_group("foundation"): valid=false
+	return {"valid":valid,"position":target,"rotation":posmod(turn,4)}
+
+func add_structure(kind: String, at: Vector3, turn: int, owner: String, id: int = -1):
+	if kind not in Piece.KINDS: return null
+	if id < 0:
+		id = 1
+		for item in structures: id = maxi(id,item.structure_id+1)
+	var piece := Piece.new()
+	add_child(piece)
+	piece.setup({"id":id,"kind":kind,"position":[at.x,at.y,at.z],"rotation":posmod(turn,4),"owner":owner,"hp":100,"open":false})
+	structures.append(piece)
+	return piece
+func get_structure(id: int):
+	for piece in structures:
+		if piece.structure_id == id: return piece
+	return null
+func structure_near(body, kind: String = "", distance: float = 3.0):
+	var result = null
+	for piece in structures:
+		var d: float = piece.position.distance_to(body.position)
+		if d < distance and (kind.is_empty() or piece.kind == kind): result=piece; distance=d
+	return result
+func toggle_door(id: int) -> bool:
+	var piece = get_structure(id)
+	if piece == null or piece.kind != "door": return false
+	piece.set_open(not piece.open); return true
+func bed_spawn(identity: String) -> Vector3:
+	for piece in structures:
+		if piece.kind == "bed" and piece.bound_to == identity: return piece.position+Vector3(1.5,0.5,0)
+	return Vector3(0,terrain_height(0,0)+0.2,0)
+func building_records() -> Array:
+	var result: Array = []
+	for piece in structures: result.append(piece.get_record())
+	return result
+func restore_buildings(records: Array) -> void:
+	var ids: Dictionary = {}
+	for record in records:
+		var id := int(record["id"]); ids[id]=true
+		var piece = get_structure(id)
+		if piece == null:
+			var p: Array = record["position"]
+			piece = add_structure(record["kind"],Vector3(p[0],p[1],p[2]),record["rotation"],record["owner"],id)
+		if piece != null:
+			piece.hp = int(record["hp"]); piece.set_open(bool(record.get("open",false)))
+			piece.storage = record.get("storage",{}).duplicate(true); piece.bound_to = str(record.get("bound_to",""))
+	for piece in structures.duplicate():
+		if not ids.has(piece.structure_id): structures.erase(piece); remove_child(piece); piece.queue_free()
+
+func _make_points_of_interest() -> void:
+	for place in sampler.locations:
+		var node := StaticBody3D.new(); node.position=place["position"]; add_child(node); _poi_nodes.append(node)
+		var rock := Color("#66645b")
+		if place["kind"] == "cave":
+			for side in [-1,1]:
+				Shapes.box(node,Vector3(2,4,12),Vector3(side*4,2,0),rock)
+				var shape := BoxShape3D.new(); shape.size=Vector3(2,4,12); Shapes.collider(node,shape,Vector3(side*4,2,0))
+			for item in [[Vector3(10,1.5,12),Vector3(0,4.5,0)],[Vector3(10,4,1),Vector3(0,2,5.5)]]:
+				Shapes.box(node,item[0],item[1],rock); var shape:=BoxShape3D.new();shape.size=item[0];Shapes.collider(node,shape,item[1])
+			node.add_to_group("rain_roof");node.add_to_group("cave")
+		else:
+			for x in [-4,0,4]:
+				for z in [-4,4]:
+					Shapes.cylinder(node,0.6,3.2,Vector3(x,1.6,z),rock)
+					var shape:=CylinderShape3D.new();shape.radius=0.6;shape.height=3.2;Shapes.collider(node,shape,Vector3(x,1.6,z))

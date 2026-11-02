@@ -48,6 +48,8 @@ func stream(kind: String, loop: bool = false) -> AudioStreamWAV:
 		cache[kind] = value
 	return cache[kind]
 func play(kind: String, at: Vector3) -> void:
+	if game.graphics.applied.get("captions",false) and game.hud != null and kind in ["wood","stone","combat","damage","pickup","build"]:
+		game.hud.notify_message(TranslationServer.translate({"wood":"Wood cutting","stone":"Mining","combat":"Impact","damage":"Pain","pickup":"Item collected","build":"Building"}[kind]))
 	if game.session.role == "dedicated" or not is_instance_valid(game.player) or game.player.position.distance_to(at) > 24: return
 	var player := pool[cursor]
 	cursor = (cursor + 1) % pool.size()
@@ -68,7 +70,7 @@ func _process(delta: float) -> void:
 	combat_left = maxf(0, combat_left - delta)
 	var next := "menu"
 	if game.player != null and game.running:
-		if game.player.attack_time > 0: combat_left = 8
+		if game.player.attack_time > 0 and game.player.action_kind.is_empty(): combat_left = 8
 		next = "creation" if game.player.creation_pending else ("combat_music" if combat_left > 0 else ("night" if game.clock.daylight() < 0.1 else "exploration"))
 		if not wind.playing: wind.play()
 	else:
@@ -94,12 +96,21 @@ func _physics_process(_delta: float) -> void:
 		step_distance[id] = float(step_distance.get(id, 0)) + moved
 		if float(step_distance[id]) > (1.2 if body.stamina > 98 else 1.6):
 			step_distance[id] = 0.0
-			var h: float = game.world.height_at(body.position.x, body.position.z)
+			var h: float = game.world.terrain_height(body.position.x, body.position.z)
 			var surface := "water" if h < -2.7 else ("sand" if h < -2.1 else ("dirt" if Vector2(body.position.x, body.position.z).length() < 5 else "grass"))
 			play("step_" + surface, body.position)
 func stop() -> void:
+	set_process(false)
+	set_physics_process(false)
 	ui.stop()
 	wind.stop()
 	for player in music: player.stop()
 	for player in pool:
 		if is_instance_valid(player): player.stop()
+
+	ui.stream = null
+	wind.stream = null
+	for player in music: player.stream = null
+	for player in pool:
+		if is_instance_valid(player): player.stream = null
+	cache.clear()

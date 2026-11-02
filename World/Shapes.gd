@@ -84,3 +84,61 @@ static func consolidate(parent: Node3D) -> void:
 		merged.mesh = surfaces[key].commit()
 		merged.material_override = used_materials[key]
 		parent.add_child(merged)
+
+static var sculpted_meshes: Dictionary = {}
+
+static func sculpted_mesh(profile: Array, sides: int = 8, variation: int = 0) -> ArrayMesh:
+	# Each ring is [height, half-width, half-depth, offset-x, offset-z].
+	# Hand-authored profiles produce silhouettes; there are no sphere primitives.
+	var key := str([profile, sides, variation])
+	if sculpted_meshes.has(key): return sculpted_meshes[key]
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var rings: Array = []
+	for ring_index in range(profile.size()):
+		var ring: Array = []
+		var p: Array = profile[ring_index]
+		for side in range(sides):
+			var angle := float(side) / sides * TAU
+			var irregular := 1.0 + sin(side * 2.3 + ring_index * 1.9 + variation) * 0.045
+			ring.append(Vector3(cos(angle) * float(p[1]) * irregular + float(p[3]), float(p[0]), sin(angle) * float(p[2]) * irregular + float(p[4])))
+		rings.append(ring)
+	for r in range(rings.size() - 1):
+		for side in range(sides):
+			var next := (side + 1) % sides
+			for v in [rings[r][side], rings[r + 1][side], rings[r][next], rings[r][next], rings[r + 1][side], rings[r + 1][next]]:
+				surface.set_color(Color.WHITE)
+				surface.set_uv(Vector2(atan2(v.z, v.x) / TAU + 0.5, v.y + 0.5))
+				surface.add_vertex(v)
+	for top in [false, true]:
+		var index: int = rings.size() - 1 if top else 0
+		var center := Vector3(float(profile[index][3]), float(profile[index][0]), float(profile[index][4]))
+		for side in range(sides):
+			var next := (side + 1) % sides
+			for v in ([center, rings[index][next], rings[index][side]] if top else [center, rings[index][side], rings[index][next]]):
+				surface.set_color(Color.WHITE)
+				surface.set_uv(Vector2(v.x + 0.5, v.z + 0.5))
+				surface.add_vertex(v)
+	surface.generate_normals()
+	var result: ArrayMesh = surface.commit()
+	sculpted_meshes[key] = result
+	return result
+
+static func sculpted(parent: Node3D, at: Vector3, size: Vector3, color: Color, kind: String = "stone", variation: int = 0) -> MeshInstance3D:
+	var profile: Array
+	match kind:
+		"head": profile = [[-0.5,0.23,0.24,0,0.01],[-0.30,0.42,0.39,0,-0.05],[0.08,0.49,0.43,0,0],[0.35,0.42,0.36,0,0.02],[0.49,0.25,0.24,0,0.01]]
+		"body": profile = [[-0.5,0.35,0.35,0,0],[-0.28,0.43,0.42,0,0],[0.16,0.50,0.44,0,-0.02],[0.42,0.43,0.35,0,-0.01],[0.5,0.30,0.28,0,0]]
+		"leaf": profile = [[-0.5,0.04,0.01,0,0],[-0.16,0.45,0.06,0,0],[0.14,0.5,0.04,0.03,0],[0.5,0.015,0.01,0.08,0]]
+		"fur": profile = [[-0.5,0.42,0.33,0,0],[-0.3,0.5,0.38,0,0],[0.22,0.44,0.35,0,0],[0.5,0.24,0.22,0,0]]
+		_: profile = [[-0.45,0.25,0.28,0,0],[-0.25,0.48,0.38,-0.035,0],[0.18,0.46,0.45,0.025,0.01],[0.44,0.24,0.30,0.02,0]]
+	var node := mesh(parent, sculpted_mesh(profile, 8 if kind != "leaf" else 5, variation % 5), at, color)
+	node.scale = size
+	return node
+
+static func tapered_branch(parent: Node3D, start: Vector3, end: Vector3, base: float, tip: float, color: Color, variation: int = 0) -> MeshInstance3D:
+	var profile := [[-0.5,1.0,1.0,0,0],[-0.18,0.91,0.88,0.10,0.04],[0.20,0.74,0.74,-0.04,0.03],[0.5,tip / maxf(base,0.001),tip / maxf(base,0.001),0,0]]
+	var node := mesh(parent, sculpted_mesh(profile, 7, variation % 4), (start + end) * 0.5, color)
+	node.scale = Vector3(base, start.distance_to(end), base)
+	node.quaternion = Quaternion(Vector3.UP, (end - start).normalized())
+	return node

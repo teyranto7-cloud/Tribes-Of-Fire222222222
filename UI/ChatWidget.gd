@@ -66,7 +66,7 @@ func configure(value) -> void:
 	minimized.offset_top = -108
 	minimized.offset_bottom = -78
 	minimized.offset_right = 160
-	minimized.text = tr("Chat") + " [Enter]"
+	minimized.text = tr("Chat")
 	minimized.pressed.connect(func(): open())
 	root.add_child(minimized)
 	game.runtime.message_added.connect(_message)
@@ -92,7 +92,7 @@ func open(choice: String = "", recipient: String = "") -> void:
 func hide_chat() -> void:
 	panel.hide()
 	minimized.show()
-	minimized.text = tr("Chat") + " [Enter]"
+	minimized.text = tr("Chat")
 	field.release_focus()
 	game.set_controls(game.hud.mode == "")
 
@@ -107,7 +107,7 @@ func reset_session() -> void:
 	identity_list.clear()
 	targets.clear()
 	minimized.show()
-	minimized.text = tr("Chat") + " [Enter]"
+	minimized.text = tr("Chat")
 func _targets() -> void:
 	targets.clear()
 	identity_list.clear()
@@ -130,7 +130,7 @@ func _targets() -> void:
 		target = ""
 	targets.disabled = identity_list.is_empty()
 func refresh_texts() -> void:
-	minimized.text = tr("Chat") + " [Enter]"
+	minimized.text = tr("Chat")
 	for i in range(CHANNELS.size()):
 		channel_choice.set_item_text(i, tr(CHANNELS[i].capitalize()))
 	field.placeholder_text = tr("Message") + " · /ajuda"

@@ -1,10 +1,11 @@
 extends RefCounted
+const Balance = preload("res://Game/Balance.gd")
 
 const MAX_HP := 100
 const REGEN_INTERVAL := 3.0
 var hp: int = MAX_HP
 var quiet_seconds: float = 0.0
-var regen_delay: float = 6.0
+var regen_delay: float = Balance.number("vitals", "regen_delay", 6)
 var regen_block_left: float = 0.0
 
 func damage(amount: int) -> void:
@@ -24,7 +25,8 @@ func advance(delta: float, safe: bool = true) -> void:
 		quiet_seconds = 0.0
 		return
 	quiet_seconds += available
-	var ticks := int(floor((quiet_seconds + 0.00000001) / REGEN_INTERVAL))
+	var interval := maxf(0.01, Balance.number("vitals", "regen_interval", REGEN_INTERVAL))
+	var ticks := int(floor((quiet_seconds + 0.00000001) / interval))
 	if ticks > 0:
-		quiet_seconds = maxf(0.0, quiet_seconds - ticks * REGEN_INTERVAL)
+		quiet_seconds = maxf(0.0, quiet_seconds - ticks * interval)
 		hp = mini(MAX_HP, hp + ticks)

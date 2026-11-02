@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 
@@ -175,6 +176,49 @@ class BuildIntegrityTests(unittest.TestCase):
         self.assertIn('https://github.com/teyranto7-cloud/Tribes-Of-Fire/blob/main/Downloads/', readme)
         self.assertNotIn('](Downloads/', readme)
         self.assertEqual((self.root / 'README.md').read_text(encoding='utf-8'), original)
+
+    def test_standalone_source_zip_excludes_profiles_credentials_and_builds(self) -> None:
+        public = ['README.md', 'World/Terrain.gd', 'Balance/rules.json', 'Assets/model.glb',
+                  'Tools/source_manifest.py', '.github/workflows/qa.yml', '.gitignore']
+        private = ['export_credentials.cfg', '.env', '.env.production', 'identity.cfg',
+                   'settings.cfg', 'graphics.cfg', 'private/client.key', 'private/signing.pfx',
+                   '.aws/credentials', '.cache/response.json', 'Downloads/old/manifest.json',
+                   'builds/trace.json', 'dist/manifest.json', '.godot/cache/test.json']
+        for relative in public + private:
+            file = self.root / relative
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_text('Deliberately public fixture' if relative in public else 'NONWORKING_TEST_SECRET')
+        target = self.root / 'source.zip'
+        package_tool.make_source_zip(self.root, target)
+        with zipfile.ZipFile(target) as archive:
+            names = set(archive.namelist())
+            for relative in public:
+                self.assertIn('TribesOfFire/' + relative, names)
+            for relative in private:
+                self.assertNotIn('TribesOfFire/' + relative, names)
+            for member in names:
+                self.assertNotIn(b'NONWORKING_TEST_SECRET', archive.read(member))
+
+    def test_git_source_zip_respects_ignore_and_keeps_new_public_sources(self) -> None:
+        subprocess.run(['git', 'init', '-q', str(self.root)], check=True)
+        (self.root / '.gitignore').write_text('local-note.txt\nexport_credentials.cfg\n', encoding='utf-8')
+        (self.root / 'local-note.txt').write_text('NONWORKING_TEST_SECRET')
+        (self.root / 'export_credentials.cfg').write_text('NONWORKING_TEST_SECRET')
+        subprocess.run(['git', '-C', str(self.root), 'add', '-f', 'export_credentials.cfg'], check=True)
+        (self.root / 'new_feature.gd').write_text('extends Node\n')
+        target = self.root / 'source.zip'
+        package_tool.make_source_zip(self.root, target)
+        with zipfile.ZipFile(target) as archive:
+            self.assertIn('TribesOfFire/new_feature.gd', archive.namelist())
+            self.assertNotIn('TribesOfFire/local-note.txt', archive.namelist())
+            self.assertNotIn('TribesOfFire/export_credentials.cfg', archive.namelist())
+
+    def test_runtime_signature_does_not_hash_export_credentials(self) -> None:
+        with patch.object(build_tool, 'ROOT', self.root):
+            before = build_tool.source_signature()
+            (self.root / 'export_credentials.cfg').write_text('NONWORKING_TEST_SECRET')
+            after = build_tool.source_signature()
+        self.assertEqual(before, after)
 
 
 if __name__ == '__main__':

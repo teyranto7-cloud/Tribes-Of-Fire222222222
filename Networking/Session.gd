@@ -13,7 +13,11 @@ signal command_received(id: int, command: String, data: Dictionary)
 signal event_received(kind: String, data: Dictionary)
 signal voice_requested(id: int, sequence: int, packet: PackedByteArray, channel: String, target: String)
 signal voice_received(id: int, sequence: int, packet: PackedByteArray, channel: String)
-const COMMANDS := ["appearance", "eat", "drink", "cook", "respawn", "inventory_move", "inventory_drop", "equip", "unequip", "craft", "interact", "combat", "mine", "build", "tribe_create", "tribe_invite", "tribe_accept", "tribe_leave", "tribe_kick", "tribe_leader", "chat", "group_create", "group_invite", "group_accept", "group_leave", "group_kick", "call_invite", "call_accept", "call_leave", "block"]
+signal admin_requested(id: int, action: String, data: Dictionary)
+const ServerConfig = preload("res://Networking/ServerConfig.gd")
+const SnapshotCodec = preload("res://Networking/SnapshotCodec.gd")
+const PROTOCOL_VERSION := 4
+const COMMANDS := ["appearance", "eat", "drink", "cook", "respawn", "inventory_move", "inventory_drop", "equip", "unequip", "craft", "interact", "combat", "mine", "build", "tribe_create", "tribe_invite", "tribe_accept", "tribe_leave", "tribe_kick", "tribe_leader", "chat", "group_create", "group_invite", "group_accept", "group_leave", "group_kick", "call_invite", "call_accept", "call_leave", "block", "chest_transfer", "refuel", "research", "craft_cancel", "repair", "plant", "harvest_crop", "fish", "tame", "map_mark", "map_remove"]
 
 const DEFAULT_PORT := 24567
 const MAX_PLAYERS := 100
@@ -33,6 +37,22 @@ var _keys: Dictionary = {}
 var _identity: String = ""
 var _leaving: bool = false
 var _world_owner: String = ""
+var server_options: Dictionary = ServerConfig.defaults()
+var _password: String = ""
+var _challenges: Dictionary = {}
+var _snapshot_out: Dictionary = {}
+var _snapshot_in: Dictionary = {}
+var _snapshot_sequence: int = 0
+var _moderation_path: String = ""
+var _banned: Dictionary = {}
+var _muted_until: Dictionary = {}
+var snapshot_bytes_sent: int = 0
+var snapshot_uncompressed_bytes: int = 0
+var snapshot_packets: int = 0
+var voice_rate_drops: int = 0
+var audit_counts: Dictionary = {}
+var _audit_file: FileAccess
+var _last_audit_usec: int = 0
 
 func _ready() -> void:
 	multiplayer.peer_connected.connect(_peer_connected)
@@ -47,7 +67,10 @@ func _process(_delta: float) -> void:
 	for id in _pending.keys():
 		if Time.get_ticks_msec() - int(_pending[id]) > 10000:
 			_pending.erase(id)
+			_challenges.erase(id)
 			multiplayer.multiplayer_peer.disconnect_peer(id)
+	if Time.get_ticks_usec() - _last_audit_usec > 10000000 and not audit_counts.is_empty():
+		flush_audit()
 
 func player_key(id: int) -> String:
 	return "1" if id == 1 else str(_keys.get(id, ""))
@@ -124,10 +147,13 @@ func host_game(port: int = DEFAULT_PORT, max_players: int = 16, dedicated: bool 
 	connection_ready.emit.call_deferred()
 	return OK
 
-func join_game(address: String, port: int = DEFAULT_PORT) -> Error:
+func join_game(address: String, port: int = DEFAULT_PORT, password: String = "") -> Error:
 	if address.strip_edges().is_empty() or address.length() > 253 or port < 1 or port > 65535:
 		return ERR_INVALID_PARAMETER
+	if password.length() > 128 or password.to_utf8_buffer().has(0):
+		return ERR_INVALID_PARAMETER
 	close()
+	_password = password
 	role = "client"
 	local_id = 0
 	if not _load_identity():
@@ -141,6 +167,7 @@ func join_game(address: String, port: int = DEFAULT_PORT) -> Error:
 	return OK
 
 func close() -> void:
+	flush_audit()
 	var transport: MultiplayerPeer = multiplayer.multiplayer_peer
 	# Detach SceneMultiplayer before destroying ENet channels; its teardown can send packets.
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
@@ -148,9 +175,15 @@ func close() -> void:
 		transport.close()
 	accepted_peers.clear()
 	_pending.clear()
+	_challenges.clear()
 	_keys.clear()
 	_rate.clear()
+	_snapshot_out.clear()
+	_snapshot_in.clear()
+	_snapshot_sequence = 0
+	_password = ""
 	_world_owner = ""
+	_leaving = false
 	role = "offline"
 	local_id = 1
 
@@ -241,6 +274,7 @@ static func sanitize_intent(data: Dictionary) -> Dictionary:
 func _allowed(sender: int, kind: String, limit: int) -> bool:
 	if role not in ["host", "dedicated"] or not accepted_peers.has(sender):
 		rejected_commands += 1
+		_audit("unaccepted_" + kind)
 		return false
 	var key := "%d:%s" % [sender, kind]
 	var now := Time.get_ticks_msec()
@@ -251,6 +285,7 @@ func _allowed(sender: int, kind: String, limit: int) -> bool:
 	_rate[key] = bucket
 	if int(bucket["count"]) > limit:
 		rejected_commands += 1
+		_audit("rate_" + kind)
 		return false
 	return true
 
@@ -280,25 +315,64 @@ func _receive_state(state: Dictionary) -> void:
 	if role == "client":
 		state_received.emit(state)
 
+static func password_proof(password: String, nonce: String, token: String, version: String, protocol: int = PROTOCOL_VERSION) -> String:
+	var crypto := Crypto.new()
+	var message := "%s:%s:%s:%d" % [nonce, token.sha256_text(), version, protocol]
+	return crypto.hmac_digest(HashingContext.HASH_SHA256, password.to_utf8_buffer(), message.to_utf8_buffer()).hex_encode()
+
+@rpc("authority", "call_remote", "reliable", 2)
+func _challenge(nonce: String, protocol: int, version: String, required: bool, server_name: String) -> void:
+	if role != "client" or nonce.length() != 64:
+		return
+	var local_version := str(ProjectSettings.get_setting("application/config/version", ""))
+	if protocol != PROTOCOL_VERSION or version != local_version:
+		close()
+		failed.emit("Incompatible game version / Versão do jogo incompatível.")
+		return
+	if server_name.length() > 64:
+		return
+	var proof := password_proof(_password, nonce, _identity, local_version) if required else ""
+	_authenticate.rpc_id(1, _identity, proof, PROTOCOL_VERSION, local_version)
+
 @rpc("any_peer", "call_remote", "reliable", 2)
-func _authenticate(token: String) -> void:
+func _authenticate(token: String, proof: String = "", protocol: int = -1, version: String = "") -> void:
 	var sender: int = multiplayer.get_remote_sender_id()
 	if role not in ["host", "dedicated"] or not _pending.has(sender):
 		return
-	if not _valid_identity(token):
-		_pending.erase(sender)
-		multiplayer.multiplayer_peer.disconnect_peer(sender)
+	if not _valid_identity(token) or protocol != PROTOCOL_VERSION or version != str(ProjectSettings.get_setting("application/config/version", "")):
+		_reject_handshake(sender, "Incompatible game version / Versão do jogo incompatível.")
 		return
+	var identity := token.sha256_text()
+	if _banned.has(identity):
+		_reject_handshake(sender, "Access denied / Acesso recusado.")
+		return
+	var password := str(server_options.get("password", ""))
+	if not password.is_empty():
+		var expected := password_proof(password, str(_challenges.get(sender, "")), token, version)
+		if proof.length() != 64 or not Crypto.new().constant_time_compare(expected.to_utf8_buffer(), proof.to_utf8_buffer()):
+			_reject_handshake(sender, "Incorrect server password / Senha do servidor incorreta.")
+			return
 	var key := profile_key_for_identity(token.sha256_text())
 	# A reconnect can reclaim an offline record, never another currently active peer.
 	if key.is_empty():
-		_pending.erase(sender)
-		multiplayer.multiplayer_peer.disconnect_peer(sender)
+		_reject_handshake(sender, "Identity already connected / Identidade já conectada.")
 		return
 	_pending.erase(sender)
+	_challenges.erase(sender)
 	_keys[sender] = key
 	accepted_peers[sender] = true
 	peer_joined.emit(sender)
+	_audit("authenticated")
+
+func _reject_handshake(id: int, reason: String) -> void:
+	_pending.erase(id)
+	_challenges.erase(id)
+	_audit("authentication_rejected")
+	_rejected.rpc_id(id, reason)
+	var transport := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	if transport != null:
+		var peer := transport.get_peer(id)
+		if peer != null: peer.peer_disconnect_later()
 
 @rpc("any_peer", "call_remote", "reliable", 2)
 func _leave() -> void:
@@ -320,9 +394,14 @@ func _peer_connected(id: int) -> void:
 		multiplayer.multiplayer_peer.disconnect_peer(id)
 		return
 	_pending[id] = Time.get_ticks_msec()
+	var nonce := Crypto.new().generate_random_bytes(32).hex_encode()
+	_challenges[id] = nonce
+	_challenge.rpc_id(id, nonce, PROTOCOL_VERSION, str(ProjectSettings.get_setting("application/config/version", "")), not str(server_options.get("password", "")).is_empty(), str(server_options.get("name", "Tribes of Fire")))
 
 func _peer_disconnected(id: int) -> void:
 	_pending.erase(id)
+	_challenges.erase(id)
+	_snapshot_out.erase(id)
 	if accepted_peers.erase(id):
 		for bucket in _rate.keys():
 			if str(bucket).begins_with("%d:" % id):
@@ -351,7 +430,7 @@ func _connected() -> void:
 	if role == "client":
 		local_id = multiplayer.get_unique_id()
 		_keys[local_id] = _identity.sha256_text()
-		_authenticate.rpc_id(1, _identity)
+		_leaving = false
 		connection_ready.emit()
 
 func _connection_failed() -> void:
@@ -367,20 +446,31 @@ static func valid_command(command: String, data: Dictionary) -> bool:
 	if command == "appearance":
 		return preload("res://Character/Appearance.gd").valid(data)
 	var fields: Dictionary = {
-		"eat": ["item"], "drink": [], "cook": [], "respawn": [], "inventory_move": ["from", "to", "amount"],
-		"inventory_drop": ["slot", "amount"], "equip": ["slot"], "unequip": ["equipment"], "craft": ["recipe"], "interact": [], "mine": [], "combat": ["kind"], "build": ["piece"],
+		"eat": ["item"], "drink": [], "cook": [], "respawn": [], "inventory_move": ["from", "to", "amount"], "inventory_drop": ["slot", "amount"], "equip": ["slot"], "unequip": ["equipment"], "craft": ["recipe"], "interact": [], "mine": [], "combat": ["kind"],
 		"tribe_create": ["name"], "tribe_invite": ["target"], "tribe_accept": [], "tribe_leave": [], "tribe_kick": ["target"], "tribe_leader": ["target"],
-		"chat": ["channel", "target", "text"], "group_create": ["name", "kind"], "group_invite": ["id", "target"], "group_accept": [], "group_leave": ["id"], "group_kick": ["id", "target"], "call_invite": ["target"], "call_accept": ["id"], "call_leave": ["id"], "block": ["target", "enabled"]}
-	if not fields.has(command) or data.size() != fields[command].size():
-		return false
+		"chat": ["channel","target","text"], "group_create": ["name","kind"], "group_invite": ["id","target"], "group_accept": [], "group_leave": ["id"], "group_kick": ["id","target"], "call_invite": ["target"], "call_accept": ["id"], "call_leave": ["id"], "block": ["target","enabled"],
+		"chest_transfer": ["structure","slot","amount","to_chest"], "refuel": [], "research": ["technology"], "craft_cancel": ["index"], "repair": ["slot"], "plant": ["structure","crop"], "harvest_crop": ["structure"], "fish": [], "tame": ["animal"], "map_mark": ["position","name","color","shared"], "map_remove": ["id"]}
+	if command == "build":
+		if not data.get("piece") is String or data["piece"] not in ["foundation","floor","wall","window","door","roof","stairs","fence","bed","chest","garden","workbench","furnace"]: return false
+		if data.size() != (2 if data.has("rotation") else 1): return false
+		return not data.has("rotation") or (_number(data["rotation"]) and data["rotation"] == floorf(float(data["rotation"])) and data["rotation"] >= 0 and data["rotation"] <= 3)
+	if not fields.has(command) or data.size() != fields[command].size(): return false
 	for key in fields[command]:
 		if not data.has(key): return false
-		if key in ["slot", "from", "to", "amount"]:
-			if not (data[key] is int or data[key] is float) or data[key] != floorf(data[key]) or data[key] < (1 if key == "amount" else 0) or data[key] > (9999 if key == "amount" else 35): return false
-		elif key == "enabled":
+		if key in ["enabled","shared","to_chest"]:
 			if not data[key] is bool: return false
-		elif not data[key] is String:
-			return false
+		elif key == "position":
+			if not data[key] is Array or data[key].size()!=2: return false
+			for value in data[key]:
+				if not _number(value) or absf(float(value))>160: return false
+		elif key in ["slot","from","to","amount","index","animal","structure","color"] or (key=="id" and command=="map_remove"):
+			if not _number(data[key]) or float(data[key]) != floorf(float(data[key])): return false
+			var limits: Dictionary = {"slot":[0,35],"from":[0,35],"to":[0,35],"amount":[1,9999],"index":[0,4],"animal":[0,11],"structure":[1,1000000],"color":[0,5],"id":[1,1000000]}
+			if data[key]<limits[key][0] or data[key]>limits[key][1]: return false
+		elif not data[key] is String: return false
+	if command=="map_mark" and (data["name"].strip_edges().is_empty() or data["name"].length()>40): return false
+	if command=="research" and data["technology"] not in ["knapping","firecraft","leatherwork","metalwork"]: return false
+	if command=="plant" and data["crop"]!="berries": return false
 	if command == "combat" and data["kind"] not in ["light", "heavy", "ranged"]: return false
 	if command == "unequip" and data["equipment"] not in ["hand", "offhand", "armor"]: return false
 	if command == "chat" and (data["channel"] not in ["global", "local", "private", "group", "tribe", "diplomacy"] or data["text"].length() > 240): return false
@@ -477,3 +567,196 @@ func _server_disconnected() -> void:
 	local_id = 0
 	if not _leaving:
 		failed.emit("Servidor desconectado / Server disconnected.")
+
+func configure_server(options: Dictionary, moderation_path: String = "user://server-moderation.json") -> String:
+	var validated := ServerConfig.normalize(options)
+	if not validated["error"].is_empty(): return validated["error"]
+	server_options = validated["data"]
+	_moderation_path = moderation_path
+	_banned.clear()
+	_muted_until.clear()
+	for identity in server_options["bans"]: _banned[identity] = true
+	if FileAccess.file_exists(moderation_path):
+		var file := FileAccess.open(moderation_path, FileAccess.READ)
+		if file == null: return "Could not read server moderation state"
+		if file.get_length() > 262144:
+			file.close()
+			return "Server moderation state exceeds its size limit"
+		var parser := JSON.new()
+		var error := parser.parse(file.get_as_text())
+		file.close()
+		if error != OK or not _valid_moderation(parser.data):
+			return "Invalid server moderation state; existing file was preserved"
+		for identity in parser.data["bans"]: _banned[identity] = true
+		_muted_until = parser.data["mutes"].duplicate()
+	return ""
+
+static func _valid_moderation(data: Variant) -> bool:
+	if not data is Dictionary or data.get("version") != 1 or not data.get("bans") is Array or not data.get("mutes") is Dictionary or data["bans"].size() > 1024 or data["mutes"].size() > 1024:
+		return false
+	for identity in data["bans"]:
+		if not ServerConfig.identity_valid(identity): return false
+	for identity in data["mutes"]:
+		var until: Variant = data["mutes"][identity]
+		if not ServerConfig.identity_valid(identity) or not (until is float or until is int) or not is_finite(float(until)) or until < 0 or until > 1000000000000:
+			return false
+	return true
+
+func _persist_moderation() -> bool:
+	if _moderation_path.is_empty(): return false
+	var data := {"version": 1, "bans": _banned.keys(), "mutes": _muted_until}
+	if not _valid_moderation(data): return false
+	var absolute := ProjectSettings.globalize_path(_moderation_path)
+	if DirAccess.make_dir_recursive_absolute(absolute.get_base_dir()) != OK: return false
+	var temporary := _moderation_path + ".tmp"
+	var file := FileAccess.open(temporary, FileAccess.WRITE)
+	if file == null: return false
+	file.store_string(JSON.stringify(data))
+	file.flush()
+	var error := file.get_error()
+	file.close()
+	if error != OK: return false
+	# Preserve the prior policy if a replacement fails; never silently forget a ban.
+	var backup := absolute + ".bak"
+	if FileAccess.file_exists(_moderation_path):
+		if FileAccess.file_exists(backup) and DirAccess.remove_absolute(backup) != OK: return false
+		if DirAccess.rename_absolute(absolute, backup) != OK: return false
+	error = DirAccess.rename_absolute(ProjectSettings.globalize_path(temporary), absolute)
+	if error != OK and FileAccess.file_exists(backup): DirAccess.rename_absolute(backup, absolute)
+	return error == OK
+
+func _identity_for_peer(id: int) -> String:
+	var identity := player_key(id)
+	return _world_owner if identity == "1" else identity
+
+func is_admin(id: int) -> bool:
+	if not is_authority(): return false
+	if id == 1: return true # Local process owner; remote peers never get transport ID 1.
+	return accepted_peers.has(id) and _identity_for_peer(id) in server_options.get("admins", [])
+
+func is_muted(id: int) -> bool:
+	return float(_muted_until.get(_identity_for_peer(id), 0)) > Time.get_unix_time_from_system()
+
+func public_server_info() -> Dictionary:
+	var result := ServerConfig.public_state(server_options)
+	result["players"] = accepted_peers.size() + (1 if role == "host" else 0)
+	result["version"] = str(ProjectSettings.get_setting("application/config/version", ""))
+	result["protocol"] = PROTOCOL_VERSION
+	return result
+
+func send_admin_action(action: String, data: Dictionary = {}) -> void:
+	if is_authority(): _handle_admin(1, action, data)
+	elif _client_connected(): _submit_admin.rpc_id(1, action, data)
+
+@rpc("any_peer", "call_remote", "reliable", 2)
+func _submit_admin(action: String, data: Dictionary) -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	if not _allowed(sender, "admin", 4): return
+	_handle_admin(sender, action, data)
+
+func _handle_admin(sender: int, action: String, data: Dictionary) -> void:
+	if not is_admin(sender) or action not in ["kick", "ban", "unban", "mute", "unmute", "players", "save", "shutdown", "set_rule"] or not _bounded(data, 0):
+		rejected_commands += 1
+		_audit("unauthorized_admin")
+		return
+	var identity := str(data.get("target", ""))
+	var target := 0
+	for id in accepted_peers:
+		if _identity_for_peer(id) == identity: target = id
+	if action in ["kick", "ban", "unban", "mute", "unmute"]:
+		if data.size() != 1 or not ServerConfig.identity_valid(identity): return
+		var before_bans := _banned.duplicate()
+		var before_mutes := _muted_until.duplicate()
+		if action == "ban": _banned[identity] = true
+		elif action == "unban": _banned.erase(identity)
+		elif action == "mute": _muted_until[identity] = Time.get_unix_time_from_system() + 300
+		elif action == "unmute": _muted_until.erase(identity)
+		if action != "kick" and not _persist_moderation():
+			_banned = before_bans
+			_muted_until = before_mutes
+			notify(sender, "admin", {"ok": false, "action": action})
+			_audit("moderation_write_failed")
+			return
+		if action in ["kick", "ban"] and target != 0: reject_peer(target, "Removed by the server administrator / Removido pelo administrador do servidor.")
+	elif action == "set_rule":
+		if data.size() != 2 or not data.get("rule") is String or not data.has("value"): return
+		var rule: String = data["rule"]
+		if rule not in ["pvp", "death_loss", "day_minutes", "night_minutes", "resource_rate", "difficulty"]: return
+		var updated := server_options.duplicate(true)
+		updated[rule] = data["value"]
+		var checked := ServerConfig.normalize(updated)
+		if not checked["error"].is_empty(): return
+		server_options = checked["data"]
+		admin_requested.emit(sender, action, data.duplicate(true))
+	elif not data.is_empty():
+		return
+	elif action == "players":
+		var online: Array = []
+		for id in accepted_peers: online.append({"peer": id, "identity": _identity_for_peer(id)})
+		notify(sender, "admin", {"ok": true, "action": action, "players": online, "server": public_server_info(), "metrics": metrics()})
+	elif action == "save":
+		action_received.emit(1, "save")
+	else:
+		admin_requested.emit(sender, action, {})
+	_audit("admin_" + action)
+	if action != "players": notify(sender, "admin", {"ok": true, "action": action})
+
+func _audit(kind: String) -> void:
+	audit_counts[kind] = int(audit_counts.get(kind, 0)) + 1
+
+func flush_audit() -> void:
+	_last_audit_usec = Time.get_ticks_usec()
+	if audit_counts.is_empty(): return
+	if _audit_file == null:
+		var directory := ProjectSettings.globalize_path("user://logs")
+		if DirAccess.make_dir_recursive_absolute(directory) != OK: return
+		_audit_file = FileAccess.open(directory.path_join("network-%d.jsonl" % OS.get_process_id()), FileAccess.WRITE)
+	if _audit_file != null:
+		# Aggregate only categories. Tokens, passwords, payloads and chat never enter logs.
+		_audit_file.store_line(JSON.stringify({"time_utc": Time.get_datetime_string_from_system(true), "system": "network", "level": "info", "counts": audit_counts}))
+		_audit_file.flush()
+		audit_counts.clear()
+
+func metrics() -> Dictionary:
+	return {"snapshot_bytes": snapshot_bytes_sent, "snapshot_full_bytes": snapshot_uncompressed_bytes, "snapshot_packets": snapshot_packets, "rejected_commands": rejected_commands, "voice_rate_drops": voice_rate_drops}
+
+func send_snapshot(id: int, state: Dictionary) -> void:
+	if role not in ["host", "dedicated"] or not accepted_peers.has(id): return
+	var transport := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	if transport == null: return
+	var peer := transport.get_peer(id)
+	if peer == null or peer.get_state() != ENetPacketPeer.STATE_CONNECTED or peer.get_channels() <= 0: return
+	var previous: Dictionary = _snapshot_out.get(id, {})
+	var sequence: int = int(previous.get("sequence", 0)) + 1
+	var envelope: Dictionary
+	if previous.is_empty() or sequence % 100 == 0:
+		envelope = {"sequence": sequence, "base": 0, "full": state}
+	else:
+		envelope = {"sequence": sequence, "base": sequence - 1, "patch": SnapshotCodec.difference(previous["state"], state)}
+	_snapshot_out[id] = {"sequence": sequence, "state": state.duplicate(true)}
+	snapshot_bytes_sent += var_to_bytes(envelope).size()
+	snapshot_uncompressed_bytes += var_to_bytes(state).size()
+	snapshot_packets += 1
+	_receive_snapshot.rpc_id(id, envelope)
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _receive_snapshot(envelope: Dictionary) -> void:
+	if role != "client": return
+	var sequence := int(envelope.get("sequence", 0))
+	if sequence <= _snapshot_sequence: return
+	var state: Dictionary
+	if envelope.get("full") is Dictionary:
+		state = envelope["full"]
+	elif int(envelope.get("base", 0)) == _snapshot_sequence and envelope.get("patch") is Dictionary:
+		state = SnapshotCodec.apply(_snapshot_in, envelope["patch"])
+	else:
+		return # The next periodic complete state repairs a lost base after reconnect.
+	_snapshot_in = state.duplicate(true)
+	_snapshot_sequence = sequence
+	state_received.emit(state)
+
+func _exit_tree() -> void:
+	flush_audit()
+	if _audit_file != null:
+		_audit_file.close()
+		_audit_file = null

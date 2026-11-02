@@ -10,7 +10,7 @@ Unicode True
   !error "OUTPUT_FILE is required"
 !endif
 !ifndef PRODUCT_VERSION
-  !define PRODUCT_VERSION "0.3.1-dev"
+  !error "PRODUCT_VERSION must come from project.godot via Tools/package.py"
 !endif
 
 Name "Tribes of Fire"
@@ -19,7 +19,10 @@ InstallDir "$LOCALAPPDATA\Programs\TribesOfFire"
 InstallDirRegKey HKCU "Software\felipealx\TribesOfFire" "InstallDir"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
-VIProductVersion "0.3.1.0"
+!ifndef PRODUCT_FILE_VERSION
+  !define PRODUCT_FILE_VERSION "0.0.0.0"
+!endif
+VIProductVersion "${PRODUCT_FILE_VERSION}"
 Icon "../Assets/icon.ico"
 UninstallIcon "../Assets/icon.ico"
 VIAddVersionKey "ProductName" "Tribes of Fire"
@@ -92,10 +95,14 @@ Section "Tribes of Fire" SecGame
   File "${SOURCE_DIR}/ARCHITECTURE.md"
   File "${SOURCE_DIR}/PROGRESS.md"
   File "${SOURCE_DIR}/CREDITS.md"
+  File "${SOURCE_DIR}/CHANGELOG.md"
+  File "${SOURCE_DIR}/THIRD_PARTY.md"
   SetOutPath "$INSTDIR\Docs"
   File "${SOURCE_DIR}/Docs/COMMUNICATION.md"
   File "${SOURCE_DIR}/Docs/AUDIT.md"
   File "${SOURCE_DIR}/Docs/TEST_REPORT.md"
+  File "${SOURCE_DIR}/Docs/PRIVACY.md"
+  File "${SOURCE_DIR}/Docs/RELEASE_READINESS.md"
   SetOutPath "$INSTDIR\Tests"
   File "${SOURCE_DIR}/Tests/MANUAL.md"
   SetOutPath "$INSTDIR\Tools"
@@ -134,9 +141,13 @@ Section "Uninstall"
   Delete "$INSTDIR\ARCHITECTURE.md"
   Delete "$INSTDIR\PROGRESS.md"
   Delete "$INSTDIR\CREDITS.md"
+  Delete "$INSTDIR\CHANGELOG.md"
+  Delete "$INSTDIR\THIRD_PARTY.md"
   Delete "$INSTDIR\Docs\COMMUNICATION.md"
   Delete "$INSTDIR\Docs\AUDIT.md"
   Delete "$INSTDIR\Docs\TEST_REPORT.md"
+  Delete "$INSTDIR\Docs\PRIVACY.md"
+  Delete "$INSTDIR\Docs\RELEASE_READINESS.md"
   RMDir "$INSTDIR\Docs"
   Delete "$INSTDIR\Tests\MANUAL.md"
   RMDir "$INSTDIR\Tests"

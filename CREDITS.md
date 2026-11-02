@@ -17,3 +17,7 @@ Fonte TTC e atribuições oficiais redistribuídas em
 Instalador compilado com NSIS 3.11; ferramentas obtidas de pacotes Debian
 assinados. Não há dependência paga obrigatória. Arte, música e animações desta
 entrega são iniciais e precisam de produção/revisão antes de um lançamento comercial.
+
+Inventário de componentes, fontes e licenças: THIRD_PARTY.md. Informações de
+privacidade: Docs/PRIVACY.md. A licença de distribuição do conteúdo original e a
+preparação comercial ainda dependem de decisão do titular do projeto.

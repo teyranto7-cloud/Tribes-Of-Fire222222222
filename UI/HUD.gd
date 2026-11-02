@@ -172,7 +172,7 @@ func _heading(subtitle: String) -> void:
 
 
 func _footer() -> void:
-	text(t("Criado por felipealx", "Created by felipealx"), 14, MUTED)
+	text(t("Criado por felipealx", "Created by felipealx") + " · " + str(ProjectSettings.get_setting("application/config/version")), 14, MUTED)
 
 
 func loading(value: String) -> void:
@@ -218,6 +218,7 @@ func show_panel(value: String) -> void:
 		"death":
 			_heading(tr("You died"))
 			button(tr("Respawn"), func(): game.request_command("respawn", {}))
+			button(tr("Return to main menu"), Callable(game,"return_to_menu"))
 		"inventory":
 			_heading(tr("Inventory"))
 			_add_panel(preload("res://UI/InventoryPanel.gd"))
@@ -228,8 +229,21 @@ func show_panel(value: String) -> void:
 			_network()
 		"settings":
 			_settings()
-		"weather":
-			_weather()
+		"create_world": _create_world()
+		"help": _help()
+		"technology": _technology()
+		"storage": _storage()
+		"map":
+			_heading(tr("World map"))
+			_add_panel(preload("res://UI/WorldMap.gd"))
+			button(tr("Back"), func(): show_panel("pause"))
+		"credits":
+			_heading(tr("Credits"))
+			text("felipealx · Tribes of Fire")
+			text("Godot Engine — MIT")
+			text("Noto Sans CJK — SIL Open Font License 1.1")
+			text(tr("Original procedural models, music and sounds."))
+			button(tr("Back"), func(): show_panel("menu"))
 		"menu":
 			_main_menu()
 		"loading":
@@ -242,11 +256,12 @@ func show_panel(value: String) -> void:
 func _main_menu() -> void:
 	_heading(t("Sobrevivência • exploração • construção", "Survival • exploration • building"))
 	button(t("Continuar jornada salva", "Continue saved journey"), Callable(game, "load_game")).disabled = game.saved.is_empty()
-	button(t("Nova jornada local", "New local journey"), Callable(game, "new_game"))
+	button(t("Nova jornada local", "New local journey"), func(): show_panel("create_world"))
 	button(t("Hospedar / Conectar por IP", "Host / Connect by IP"), func(): show_panel("network"))
 	button(t("Configurações", "Settings"), func():
 		previous_panel = "menu"
 		show_panel("settings"))
+	button(tr("Credits"), func(): show_panel("credits"))
 	button(t("Sair", "Quit"), Callable(game, "quit_game"))
 	text(t("Versão em desenvolvimento. A nova jornada substitui o progresso local ao salvar.",
 		"Development build. A new journey replaces local progress when saved."), 14, MUTED)
@@ -264,8 +279,10 @@ func _pause() -> void:
 	button(t("Configurações", "Settings"), func():
 		previous_panel = "pause"
 		show_panel("settings"))
-	if game.session == null or game.session.is_authority():
-		button(t("Clima • administrador", "Weather • administrator"), func(): show_panel("weather"))
+	for entry in [["World map","map"],["Technology and crafting","technology"],["Help","help"]]:
+		var destination: String = entry[1]
+		button(tr(entry[0]), func(): show_panel(destination))
+	button(tr("Return to main menu"), Callable(game,"return_to_menu"))
 	button(tr("Communication"), func(): show_panel("communication"))
 	button(t("Sair do jogo", "Quit game"), Callable(game, "quit_game"))
 	text(t("O tempo do mundo continua enquanto o processo está ativo.",
@@ -290,10 +307,15 @@ func _network() -> void:
 	port.step = 1
 	port.rounded = true
 	column.add_child(port)
+	text(tr("Server password (optional)"))
+	var password := LineEdit.new()
+	password.secret = true
+	password.max_length = 128
+	column.add_child(password)
 	button(t("Hospedar neste computador", "Host on this computer"), func():
 		var selected_port := int(port.value)
 		loading(t("Iniciando servidor…", "Starting server…"))
-		game.host_game(selected_port))
+		game.host_game(selected_port, password.text))
 	button(t("Conectar ao servidor", "Connect to server"), func():
 		var selected_address := address.text.strip_edges()
 		var selected_port := int(port.value)
@@ -301,26 +323,10 @@ func _network() -> void:
 			notify_message(t("Informe somente o IP ou nome do servidor.", "Enter only the server IP or hostname."))
 			return
 		loading(t("Conectando ao servidor…", "Connecting to server…"))
-		game.join_game(selected_address, selected_port))
+		game.join_game(selected_address, selected_port, password.text))
 	button(t("Voltar", "Back"), func(): show_panel("menu"))
 	text(t("Multiplayer experimental; capacidade de 100 jogadores ainda não validada. Pela Internet, o anfitrião precisa liberar a porta UDP no roteador.",
 		"Experimental multiplayer; 100-player capacity has not been validated. Internet hosting requires forwarding the UDP port on your router."), 14, MUTED)
-
-
-func _weather() -> void:
-	_heading(t("CLIMA • ADMINISTRADOR", "WEATHER • ADMINISTRATOR"))
-	if game.session != null and not game.session.is_authority():
-		text(t("Somente o anfitrião pode alterar o clima.", "Only the host can change the weather."))
-	else:
-		text(t("Transições graduais. A chuva só causa o primeiro dano após 55 segundos contínuos sem abrigo.",
-			"Gradual transitions. Rain causes its first damage after 55 continuous seconds without shelter."), 15, MUTED)
-		for choice in [["clear", "Céu limpo", "Clear sky"], ["light_rain", "Chuva fraca", "Light rain"],
-			["heavy_rain", "Chuva forte", "Heavy rain"], ["storm", "Tempestade", "Storm"], ["fog", "Neblina", "Fog"]]:
-			var weather_name: String = choice[0]
-			button(t(choice[1], choice[2]), func():
-				game.request_weather(weather_name)
-				notify_message(t("Transição climática solicitada.", "Weather transition requested.")))
-	button(t("Voltar", "Back"), func(): show_panel("pause"))
 
 
 func notify_message(value: String) -> void:
@@ -360,8 +366,13 @@ func _process(delta: float) -> void:
 		else:
 			exposure_label.text = ""
 	hint.visible = mode == ""
-	hint.text = t("WASD mover • Mouse câmera • Shift correr • Espaço pular\n1 machado • 2 fogueira • 3 abrigo • Clique usar • Tab inventário • Esc menu",
-		"WASD move • Mouse camera • Shift sprint • Space jump\n1 axe • 2 campfire • 3 shelter • Click use • Tab inventory • Esc menu")
+	hint.text = equipped
+	var activity: Dictionary = game.runtime.activities.action_state(game.session.local_id)
+	if float(activity.get("total",0))>0:
+		hint.text = tr("Gathering") + " · %d%%" % int((1-float(activity["remaining"])/float(activity["total"]))*100)
+	var bearing := posmod(roundi(rad_to_deg(game.player.yaw)),360)
+	var directions := ["N","NW","W","SW","S","SE","E","NE"]
+	hint.text += "   ·   " + directions[posmod(roundi(bearing/45.0),8)]
 	if game.survival != null:
 		stats.text += "\n%s %.0f   %s %.0f" % [tr("Hunger"), game.survival.hunger, tr("Thirst"), game.survival.thirst]
 	if game.player.vitals.hp <= 0 and mode != "death":
@@ -411,3 +422,77 @@ func _settings() -> void:
 		slider.value_changed.connect(func(v): AudioServer.set_bus_volume_db(index, linear_to_db(maxf(v, 0.0001))); game.save_settings())
 		column.add_child(slider)
 	button(tr("Back"), func(): show_panel(previous_panel))
+
+func _create_world() -> void:
+	_heading(tr("Create world"))
+	text(tr("Seed (leave empty for a new random world)"))
+	var seed_input := LineEdit.new()
+	seed_input.max_length = 10
+	column.add_child(seed_input)
+	text(tr("New continent: 320 × 320 m. Existing worlds keep their terrain."), 14, MUTED)
+	button(tr("Create world"), func():
+		var seed_value := -1
+		if not seed_input.text.strip_edges().is_empty():
+			if not seed_input.text.is_valid_int() or int(seed_input.text)<0 or int(seed_input.text)>2147483647:
+				notify_message(tr("Invalid seed"));return
+			seed_value=int(seed_input.text)
+		game.new_game(seed_value))
+	button(tr("Back"),func(): show_panel("menu"))
+func _help() -> void:
+	_heading(tr("Help"))
+	text(t("WASD mover • Mouse câmera • Shift correr • Espaço pular\n1 machado • 2 fogueira • 3 abrigo • Clique usar • Tab inventário • Esc menu", "WASD move • Mouse camera • Shift sprint • Space jump\n1 axe • 2 campfire • 3 shelter • Click use • Tab inventory • Esc menu"))
+	text(tr("Gathering takes time. Pick up the dropped materials after cutting or mining."))
+	text(tr("Map: M · Rotate building: R · Interact: E"))
+	button(tr("Back"),func():show_panel("pause"))
+func _technology() -> void:
+	_heading(tr("Technology and crafting"))
+	var id: int = game.session.local_id
+	if not game.runtime.progression.has(id): return
+	var profile = game.runtime.progression[id]
+	text(tr("Era")+": "+str(game.runtime.Profile.era(game.runtime.known_technologies(id))))
+	for skill in profile.skills:
+		text(tr(skill.capitalize())+": "+str(profile.level(skill)),14,MUTED)
+	for key in profile.technologies():
+		var technology: String = key
+		var definition: Dictionary = profile.technologies()[key]
+		var cost := PackedStringArray()
+		for item in definition["cost"]: cost.append(preload("res://Items/Catalog.gd").display_name(item)+" × "+str(definition["cost"][item]))
+		button(tr(definition["name"])+" · "+", ".join(cost),func():game.request_command("research",{"technology":technology})).disabled=key in game.runtime.known_technologies(id)
+	var queue: Array = game.runtime.activities.queue(id)
+	for index in range(queue.size()):
+		var selected: int = index
+		button(tr("Cancel")+" · "+preload("res://Items/Catalog.gd").display_name(queue[index]["recipe"]),func():game.request_command("craft_cancel",{"index":selected}))
+	button(tr("Refuel campfire"),func():game.request_command("refuel",{}))
+	button(tr("Fish with a spear"),func():game.request_command("fish",{}))
+	button(tr("Feed and tame a nearby animal"),func():game.request_command("tame",{"animal":0}))
+	var garden = game.world.structure_near(game.player,"garden",4)
+	if garden!=null:
+		button(tr("Plant berries"),func():game.request_command("plant",{"structure":garden.structure_id,"crop":"berries"}))
+		button(tr("Harvest"),func():game.request_command("harvest_crop",{"structure":garden.structure_id}))
+	button(tr("Back"),func():show_panel("pause"))
+func _storage() -> void:
+	_heading(tr("Storage"))
+	var info: Dictionary = game.runtime.channel_state.get("storage",{})
+	var chest = game.world.get_structure(int(info.get("id",-1)))
+	if chest==null:
+		button(tr("Back"),func():show_panel(""));return
+	var items: Array = chest.storage.keys();items.sort()
+	for i in range(items.size()):
+		var index: int = i
+		button(tr("Take")+" · "+preload("res://Items/Catalog.gd").display_name(items[i])+" × "+str(chest.storage[items[i]]),func():game.request_command("chest_transfer",{"structure":chest.structure_id,"slot":index,"amount":1,"to_chest":false}))
+	var slots: Array = game.inventory.serialize()["slots"]
+	for i in range(slots.size()):
+		if slots[i].is_empty(): continue
+		var index: int = i
+		button(tr("Store")+" · "+preload("res://Items/Catalog.gd").display_name(slots[i]["id"]),func():game.request_command("chest_transfer",{"structure":chest.structure_id,"slot":index,"amount":1,"to_chest":true}))
+	button(tr("Back"),func():show_panel(""))
+
+func apply_accessibility(config: Dictionary) -> void:
+	if root==null or panel==null: return
+	var contrast: bool = config.get("high_contrast",false)
+	root.theme.set_color("font_color","Label",Color.WHITE if contrast else INK)
+	root.theme.set_color("font_color","Button",Color.WHITE if contrast else INK)
+	var style: StyleBoxFlat = panel.get_theme_stylebox("panel").duplicate()
+	style.bg_color = Color("#080b0a") if contrast else Color(0.065,0.125,0.115,0.98)
+	style.border_color = Color.WHITE if contrast else Color("#a08052")
+	panel.add_theme_stylebox_override("panel",style)

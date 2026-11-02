@@ -1,14 +1,19 @@
 extends Node3D
 
 const Shapes = preload("res://World/Shapes.gd")
+const Balance = preload("res://Game/Balance.gd")
 static var crackle: AudioStreamWAV
 var flames: Array[MeshInstance3D] = []
 var light: OmniLight3D
 var age: float = 0.0
+var fuel: float = 300.0
+var lit: bool = true
+var sound: AudioStreamPlayer3D
 var embers: CPUParticles3D
 var smoke: CPUParticles3D
 
 func _ready() -> void:
+	fuel = Balance.number("fire", "initial_fuel", 300.0)
 	for i in range(10):
 		var angle := i / 10.0 * TAU
 		var stone := Shapes.sphere(self, 0.18, Vector3(cos(angle) * 0.6, 0.13, sin(angle) * 0.6), Color("#687074"))
@@ -40,7 +45,7 @@ func _ready() -> void:
 	smoke.gravity = Vector3(0.1, 0.18, 0)
 	smoke.initial_velocity_min = 0.3
 	smoke.initial_velocity_max = 0.7
-	var sound := AudioStreamPlayer3D.new()
+	sound = AudioStreamPlayer3D.new()
 	sound.bus = "Ambient"
 	sound.stream = make_crackle()
 	sound.unit_size = 4.0
@@ -48,6 +53,7 @@ func _ready() -> void:
 	sound.volume_db = -23.0
 	add_child(sound)
 	sound.play()
+	_refresh_burning()
 
 func make_particles(count: int, lifetime: float, color: Color, radius: float, glowing: bool) -> CPUParticles3D:
 	var p := CPUParticles3D.new()
@@ -101,9 +107,45 @@ static func make_crackle() -> AudioStreamWAV:
 	return crackle
 
 func _process(delta: float) -> void:
+	if not lit:
+		return
 	age += delta
 	for i in range(flames.size()):
 		var pulse := sin(age * (7.0 + i) + i)
 		flames[i].scale = Vector3(0.8, 1.5 + pulse * 0.5, 0.8)
 		flames[i].position.y = 0.5 + pulse * 0.08
 	light.light_energy = 2.8 + sin(age * 13.0) * 0.2
+
+func advance(delta: float, raining: bool, covered: bool) -> void:
+	if not lit or not is_finite(delta) or delta <= 0:
+		return
+	fuel = maxf(0.0, fuel - delta * (Balance.number("fire", "rain_drain", 4.0) if raining and not covered else 1.0))
+	if fuel <= 0.0 or (raining and not covered):
+		lit = false
+		_refresh_burning()
+
+func add_fuel(amount: float) -> bool:
+	var maximum := Balance.number("fire", "max_fuel", 3600.0)
+	if not is_finite(amount) or amount <= 0 or fuel >= maximum:
+		return false
+	fuel = minf(maximum, fuel + amount)
+	lit = true
+	_refresh_burning()
+	return true
+
+func restore_state(state: Dictionary) -> void:
+	fuel = clampf(float(state.get("fuel", fuel)), 0, Balance.number("fire", "max_fuel", 3600.0))
+	lit = bool(state.get("lit", fuel > 0)) and fuel > 0
+	_refresh_burning()
+
+func state() -> Dictionary:
+	return {"position": [position.x, position.y, position.z], "fuel": fuel, "lit": lit}
+
+func _refresh_burning() -> void:
+	for flame in flames: flame.visible = lit
+	if light != null: light.light_energy = 2.8 if lit else 0.0
+	if embers != null: embers.emitting = lit
+	if smoke != null: smoke.emitting = lit
+	if sound != null:
+		if lit and not sound.playing: sound.play()
+		elif not lit and sound.playing: sound.stop()

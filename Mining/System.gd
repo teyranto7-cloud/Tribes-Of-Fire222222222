@@ -1,7 +1,9 @@
 extends Node3D
+const Balance = preload("res://Game/Balance.gd")
 const Shapes = preload("res://World/Shapes.gd")
 const KINDS := ["stone", "coal", "copper_ore", "tin_ore", "iron_ore", "silver_ore", "gold_ore", "sulfur", "rare_ore", "berries", "fiber", "wood"]
 var world
+var regrowth: Array = []
 var nodes: Array[StaticBody3D] = []
 var stocks: Array[int] = []
 var hits: Array[int] = []
@@ -13,7 +15,7 @@ func setup(value) -> void:
 		var p := Vector3(4, 0, -1) if i == 0 else Vector3(sin(i * 2.4) * (8 + i * 1.6), 0, cos(i * 2.4) * (8 + i * 1.6))
 		if i == 9:
 			p = Vector3(-4, 0, 1)
-		p.y = world.height_at(p.x, p.z)
+		p.y = world.terrain_height(p.x, p.z)
 		var body := StaticBody3D.new()
 		body.position = p
 		add_child(body)
@@ -34,6 +36,7 @@ func setup(value) -> void:
 		nodes.append(body)
 		stocks.append(8)
 		hits.append(0)
+		regrowth.append(0.0)
 func closest(body: Node3D, reach: float = 3.0, facing: bool = false) -> int:
 	var chosen := -1
 	for i in range(nodes.size()):
@@ -45,7 +48,7 @@ func closest(body: Node3D, reach: float = 3.0, facing: bool = false) -> int:
 		reach = offset.length()
 		chosen = i
 	return chosen
-func mine(body, inventory, id: int, hand: bool = false) -> bool:
+func mine(body, inventory, id: int, hand: bool = false, ground_reward: bool = false) -> bool:
 	if id < 0 or id >= nodes.size() or not body.authoritative or body.vitals.hp <= 0 or body.position.distance_to(nodes[id].position) > 3.0 or stocks[id] <= 0:
 		return false
 	var query := PhysicsRayQueryParameters3D.create(body.global_position + Vector3.UP,
@@ -62,15 +65,16 @@ func mine(body, inventory, id: int, hand: bool = false) -> bool:
 	var key: int = body.get_instance_id()
 	if now < int(_cooldowns.get(key, 0)) or body.stamina < 8:
 		return false
-	if not inventory.can_add(kind, 1):
+	if not ground_reward and not inventory.can_add(kind, 1):
 		return false
-	_cooldowns[key] = now + 650
+	_cooldowns[key] = now + int(Balance.number("gathering", "iron_pickaxe_action_seconds" if inventory.equipped_item() == "iron_pickaxe" else "pickaxe_action_seconds", 0.65) * 1000)
 	body.stamina -= 8
 	body.attack_time = 0.55
 	if not hand:
 		inventory.wear_equipment("hand", 1)
-	inventory.add(kind, 1)
+	if not ground_reward: inventory.add(kind, 1)
 	stocks[id] -= 1
+	if stocks[id] == 0: regrowth[id] = Time.get_unix_time_from_system() + Balance.number("gathering", "resource_regrow_seconds", 600)
 	hits[id] += 1
 	_refresh(id)
 	return true
@@ -88,3 +92,15 @@ func restore(data: Array) -> void:
 func _refresh(i: int) -> void:
 	nodes[i].visible = stocks[i] > 0
 	nodes[i].collision_layer = 1 if stocks[i] > 0 else 0
+
+func restore_regrowth(values: Array) -> void:
+	if values.size() != 22: return
+	for value in values:
+		if not (value is int or value is float) or not is_finite(float(value)) or value < 0 or value > 4102444800: return
+	regrowth = values.duplicate()
+func tick_regrowth() -> void:
+	for i in range(regrowth.size()):
+		if float(regrowth[i]) > 0 and Time.get_unix_time_from_system() >= float(regrowth[i]):
+			regrowth[i] = 0.0; stocks[i] = 8; _refresh(i)
+func reposition() -> void:
+	for node in nodes: node.position.y = world.terrain_height(node.position.x,node.position.z)

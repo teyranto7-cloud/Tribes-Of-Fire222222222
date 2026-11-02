@@ -9,6 +9,7 @@ const Survival = preload("res://Survival/Survival.gd")
 const Tribes = preload("res://Tribes/System.gd")
 const Wildlife = preload("res://Animals/Director.gd")
 const Channels = preload("res://Communication/Channels.gd")
+const SaveSchema = preload("res://Persistence/SaveSchema.gd")
 const MAX_BYTES := 16777216
 const MAX_PLAYERS := 1024
 static var owned_locks: Dictionary = {}
@@ -20,11 +21,11 @@ static func number(value: Variant, low: float, high: float) -> bool:
 static func integer(value: Variant, low: int, high: int) -> bool:
 	return number(value, low, high) and float(value) == floorf(float(value))
 
-static func position_valid(value: Variant) -> bool:
+static func position_valid(value: Variant, extent: float = 61.0) -> bool:
 	if not value is Array or value.size() != 3:
 		return false
-	return number(value[0], -61, 61) and number(value[1], -15, 40) \
-		and number(value[2], -61, 61)
+	return number(value[0], -extent, extent) and number(value[1], -30 if extent > 61 else -15, 120 if extent > 61 else 40) \
+		and number(value[2], -extent, extent)
 
 static func inventory_valid(value: Variant, legacy: bool = false) -> bool:
 	if not value is Dictionary or value.size() > Catalog.ids().size() or (legacy and value.size() != 3):
@@ -37,16 +38,16 @@ static func inventory_valid(value: Variant, legacy: bool = false) -> bool:
 			return false
 	return (not legacy or value["axe"] == 1) and (legacy or integer(value.get("shelter"), 0, 9999))
 
-static func positions_valid(value: Variant, limit: int) -> bool:
+static func positions_valid(value: Variant, limit: int, extent: float = 61.0) -> bool:
 	if not value is Array or value.size() > limit:
 		return false
 	for p in value:
-		if not position_valid(p):
+		if not position_valid(p, extent):
 			return false
 	return true
 
 static func valid(data: Variant) -> bool:
-	if not data is Dictionary or not integer(data.get("version"), 1, 3):
+	if not data is Dictionary or not integer(data.get("version"), 1, 4):
 		return false
 	if data.has("host_identity"):
 		if not data["host_identity"] is String or data["host_identity"].length() != 64:
@@ -54,22 +55,25 @@ static func valid(data: Variant) -> bool:
 		for character in data["host_identity"]:
 			if character not in "0123456789abcdef":
 				return false
-	if not integer(data.get("seed"), 1337, 1337) or not number(data.get("phase"), 0, 2700):
+	var modern: bool = int(data["version"]) == 4
+	if modern and not SaveSchema.descriptor(data): return false
+	var extent := 161.0 if modern and int(data["world"]["generator"]) == 1 else 61.0
+	if not integer(data.get("seed"), 0 if modern else 1337, 2147483647 if modern else 1337) or not number(data.get("phase"), 0, 21600 if modern else 2700):
 		return false
 	var cut: Variant = data.get("cut")
-	if not cut is Array or cut.size() > 160:
+	if not cut is Array or cut.size() > (4096 if modern else 160):
 		return false
 	var seen: Dictionary = {}
 	for id in cut:
-		if not integer(id, 0, 159) or seen.has(int(id)):
+		if not integer(id, 0, 8191 if modern else 159) or seen.has(int(id)):
 			return false
 		seen[int(id)] = true
-	if not positions_valid(data.get("fires"), 32):
+	if not positions_valid(data.get("fires"), 32, extent):
 		return false
 	if int(data["version"]) == 1:
 		return position_valid(data.get("position")) and inventory_valid(data.get("inventory"), true) \
 			and integer(data.get("hp"), 0, 100)
-	if not positions_valid(data.get("shelters"), 32) or not data.get("players") is Dictionary:
+	if not positions_valid(data.get("shelters"), 32, extent) or not data.get("players") is Dictionary:
 		return false
 	var players: Dictionary = data["players"]
 	if players.size() > MAX_PLAYERS:
@@ -78,7 +82,7 @@ static func valid(data: Variant) -> bool:
 		if not id is String or id.is_empty() or id.length() > 128:
 			return false
 		var player: Variant = players[id]
-		if not player is Dictionary or not position_valid(player.get("position")) \
+		if not player is Dictionary or not position_valid(player.get("position"), extent) \
 				or not inventory_valid(player.get("inventory")) or not integer(player.get("hp"), 0, 100):
 			return false
 		if player.has("quiet_seconds") and not number(player["quiet_seconds"], 0, 3):
@@ -117,7 +121,7 @@ static func valid(data: Variant) -> bool:
 		if not data[field] is Array or data[field].size() > (32 if field == "workshops" else 128):
 			return false
 		for record in data[field]:
-			if not record is Dictionary or not position_valid(record.get("position")):
+			if not record is Dictionary or not position_valid(record.get("position"), extent):
 				return false
 			if field == "workshops" and (record.get("kind") not in ["workbench", "furnace"] or not record.get("owner") is String or record["owner"].length() > 128):
 				return false
@@ -125,10 +129,14 @@ static func valid(data: Variant) -> bool:
 				return false
 			if field == "drops" and record.has("durability") and not integer(record["durability"], 0, 100):
 				return false
-	return data.get("weather") is Dictionary and WeatherModel.valid(data["weather"])
+	return data.get("weather") is Dictionary and WeatherModel.valid(data["weather"]) and (not modern or SaveSchema.extra(data, extent))
 
 static func migrate(data: Dictionary) -> Dictionary:
 	var output := data.duplicate(true)
+	if int(data.get("version",1))<4:
+		for field in ["world","rules","structures","fire_states","resource_timers","resource_regrowth","tribe_research","farming"]: output.erase(field)
+		for player in output.get("players",{}).values():
+			for field in ["journal","progression","craft_queue"]: player.erase(field)
 	if int(output.get("version", 0)) == 1:
 		var items: Dictionary = output["inventory"].duplicate()
 		items["shelter"] = 0
@@ -143,7 +151,9 @@ static func migrate(data: Dictionary) -> Dictionary:
 		player["hp"] = int(player["hp"])
 		for key in player["inventory"]:
 			player["inventory"][key] = int(player["inventory"][key])
-	output["version"] = 3
+	if not output.has("world"):
+		output["world"] = {"seed": 1337, "generator": 0, "size": 128}
+	output["version"] = 4
 	return output
 
 static func read_slot(path: String) -> Dictionary:

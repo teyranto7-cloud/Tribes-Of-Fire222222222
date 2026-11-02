@@ -12,13 +12,16 @@ import subprocess
 import tempfile
 import zipfile
 from build import source_signature
+from version import project_version, file_version
+from source_manifest import source_files
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '0.3.1-dev'
+VERSION = project_version()
 LICENSES = ('Godot-LICENSE.txt', 'Godot-COPYRIGHT.txt', 'Noto-CJK-COPYRIGHT.txt')
-DOCS = ('README.md', 'ARCHITECTURE.md', 'PROGRESS.md', 'CREDITS.md',
+DOCS = ('README.md', 'ARCHITECTURE.md', 'PROGRESS.md', 'CREDITS.md', 'CHANGELOG.md', 'THIRD_PARTY.md',
         'Docs/COMMUNICATION.md', 'Docs/AUDIT.md', 'Docs/TEST_REPORT.md',
+        'Docs/PRIVACY.md', 'Docs/RELEASE_READINESS.md',
         'Tests/MANUAL.md', 'Tools/Test-Windows.ps1')
 
 
@@ -84,6 +87,26 @@ def make_zip(source: Path, target: Path) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def make_source_zip(root: Path, target: Path) -> None:
+    temporary = target.with_suffix('.zip.tmp')
+    try:
+        with zipfile.ZipFile(temporary, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+            for path in source_files(root):
+                member = 'TribesOfFire/' + path.relative_to(root).as_posix()
+                if path == root / 'README.md':
+                    checksum = f'https://github.com/teyranto7-cloud/Tribes-Of-Fire/blob/main/Downloads/{VERSION}/SHA256SUMS.txt'
+                    archive.writestr(member, path.read_text(encoding='utf-8').replace(
+                        f'](Downloads/{VERSION}/SHA256SUMS.txt)', f']({checksum})'))
+                else:
+                    archive.write(path, member)
+        with zipfile.ZipFile(temporary) as archive:
+            if archive.testzip() is not None or not archive.namelist():
+                raise SystemExit('Source archive integrity failed')
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--makensis', help='NSIS compiler path (autodetected when available)')
@@ -125,7 +148,7 @@ def main() -> None:
             installer = out / f'TribesOfFire-{VERSION}-Windows-Setup.exe'
             subprocess.run([
                 compiler, '-V3', f'-DSOURCE_DIR={staged["Windows"]}',
-                f'-DOUTPUT_FILE={installer}', f'-DPRODUCT_VERSION={VERSION}',
+                f'-DOUTPUT_FILE={installer}', f'-DPRODUCT_VERSION={VERSION}', f'-DPRODUCT_FILE_VERSION={file_version()}',
                 str(ROOT / 'Tools' / 'windows_installer.nsi'),
             ], check=True, cwd=ROOT, env=env)
             if not installer.is_file():
@@ -135,26 +158,10 @@ def main() -> None:
                     raise SystemExit('NSIS did not produce a Windows executable')
             artifacts.append(installer)
     source_zip = out / f'TribesOfFire-{VERSION}-Source.zip'
-    with zipfile.ZipFile(source_zip, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
-        for directory, dirs, files in os.walk(ROOT):
-            dirs[:] = sorted(name for name in dirs if name not in {'.git', '.godot', 'builds', 'dist', 'Downloads', '.local', '__pycache__'})
-            for name in sorted(files):
-                path = Path(directory) / name
-                if path.is_symlink():
-                    raise SystemExit('Source archive refuses unexpected symlink: ' + str(path))
-                member = 'TribesOfFire/' + path.relative_to(ROOT).as_posix()
-                if path == ROOT / 'README.md':
-                    checksum = f'https://github.com/teyranto7-cloud/Tribes-Of-Fire/blob/main/Downloads/{VERSION}/SHA256SUMS.txt'
-                    archive.writestr(member, path.read_text(encoding='utf-8').replace(
-                        f'](Downloads/{VERSION}/SHA256SUMS.txt)', f']({checksum})'))
-                else:
-                    archive.write(path, member)
-    with zipfile.ZipFile(source_zip) as archive:
-        if archive.testzip() is not None:
-            raise SystemExit('Source archive integrity failed')
+    make_source_zip(ROOT, source_zip)
     artifacts.append(source_zip)
     checksums: list[str] = []
-    manifest = {'version': VERSION, 'artifacts': []}
+    manifest = {'version': VERSION, 'application_source_sha256': receipt['source_sha256'], 'artifacts': []}
     for artifact in artifacts:
         with artifact.open('rb') as stream:
             digest = hashlib.file_digest(stream, 'sha256').hexdigest()
