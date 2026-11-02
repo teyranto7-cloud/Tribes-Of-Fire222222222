@@ -9,7 +9,7 @@ pendentes estão em [PROGRESS.md](PROGRESS.md) e [Docs/PENDENCIAS.md](Docs/PENDE
 
 ## Versões e downloads
 
-**0.4.0-dev — versão de desenvolvimento.** Os executáveis não precisam do editor
+**[0.4.0-dev — versão de desenvolvimento](https://github.com/teyranto7-cloud/Tribes-Of-Fire/releases/tag/v0.4.0-dev).** Os executáveis não precisam do editor
 Godot instalado. Instale o pacote Windows ou extraia o ZIP do seu sistema:
 
 - [Instalador Windows x64](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.4.0-dev/TribesOfFire-0.4.0-dev-Windows-Setup.exe)
@@ -26,8 +26,8 @@ preserve `identity.cfg` para recuperar seu personagem no servidor.
 
 A suíte completa passou em **458 verificações**; os testes dos executáveis Linux
 passaram em mais 6. Também passaram 50 reinícios, integração com dois clientes e
-comunicação com três clientes usando áudio sintético. Instalação/runtime nativos
-Windows são conferidos pelo [workflow Windows](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/workflows/windows-qa.yml);
+comunicação com três clientes usando áudio sintético. Instalação/runtime headless nativos
+Windows passaram no [workflow Windows](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41493048214);
 renderização em Windows 10/11, microfone físico, hardware alvo e carga permanecem
 pendentes. Isso não certifica jogo completo, 60 FPS ou 100 jogadores.
 
@@ -200,8 +200,9 @@ e binários, verifica ZIPs e gera hashes. Produz instalador NSIS por usuário e 
 Windows, Linux, servidor e fontes. As três exportações 0.4.0-dev foram geradas e
 os executáveis Linux foram testados. A geração de ZIPs/NSIS não equivale à aprovação
 de instalação nativa. O QA Windows e o workflow foram adaptados estaticamente para
-a nova versão/schema/coordenadas; a execução nativa com os novos artefatos permanece
-pendente.
+a nova versão/schema/coordenadas. Instalação, atalhos, execução headless, reinício,
+reinstalação e desinstalação dos novos artefatos passaram no Windows nativo;
+renderização interativa e dispositivos físicos continuam pendentes.
 
 Arquitetura em [ARCHITECTURE.md](ARCHITECTURE.md), diagnóstico anterior às mudanças
 em [Docs/RECONSTRUCTION_DIAGNOSIS.md](Docs/RECONSTRUCTION_DIAGNOSIS.md), histórico

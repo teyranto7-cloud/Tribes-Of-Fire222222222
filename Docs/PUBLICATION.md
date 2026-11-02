@@ -22,3 +22,15 @@ A publicação é de desenvolvimento. A confirmação remota, a execução do wo
 Windows e eventual prerelease serão registradas após observar seus resultados.
 Não equivale a 1.0 ou validação de gráficos Windows, microfone/hardware físico,
 100 jogadores ou conclusão do conteúdo completo solicitado.
+
+## Resultado confirmado
+
+Código e cinco pacotes enviados para main no commit f37881dd0fe1075355e1fc77915780629661c386.
+[Prévia publicada](https://github.com/teyranto7-cloud/Tribes-Of-Fire/releases/tag/v0.4.0-dev), com os links de download dos arquivos versionados.
+O upload opcional de anexos para uploads.github.com recebeu401; os downloads
+foram publicados via Git e os links da prévia apontam para esses mesmos arquivos.
+[QA Windows](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41493048214) aprovado: checksum/documentação, instalação, atalhos,
+execução headless, saves/reinício, reinstalação e desinstalação. Todos os passos
+obrigatórios foram executados e passaram. A execução manual duplicada foi cancelada
+após a execução automática aprovada. As pendências de produto/arte/hardware/voz
+física/Windows gráfico permanecem.

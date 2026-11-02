@@ -90,3 +90,10 @@ Os novos parâmetros ficam em Data/Balance.json; a centralização de todos os
 valores legados ainda precisa revisão. A seção 22.6 autoriza MVP com pendências
 explícitas, não conclusão fictícia. Nenhum requisito pendente deve aparecer como
 pronto só porque existe um módulo, botão, script de teste ou documentação.
+
+## Atualização de publicação
+
+Prévia0.4-dev publicada. QA Windows nativo aprovado: https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41493048214 .
+Instalação/atalhos/runtime headless/persistência/reinstalação/uninstall foram
+validados; essas partes dos itens5/7 acima estão concluídas. Gráficos/dispositivos
+físicos, atualização entre versões distintas e os demais requisitos continuam pendentes.

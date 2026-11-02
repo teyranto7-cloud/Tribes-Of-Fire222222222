@@ -193,3 +193,12 @@ Não há conclusão 1.0. Permanecem sessão de 30 min, carga de 8–16, senha/mo
 Windows nativo, microfone físico, benchmark alvo, conteúdo/traduções e demais
 pendências em [PENDENCIAS.md](PENDENCIAS.md). Somente execuções observadas podem
 substituir pendências por resultados; código, botão ou script não são prova.
+
+## Confirmação posterior de entrega
+
+[Prévia0.4-dev publicada](https://github.com/teyranto7-cloud/Tribes-Of-Fire/releases/tag/v0.4.0-dev), código e pacotes em main.
+[Workflow Windows41493048214](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41493048214) concluiu com sucesso e executou
+todos os passos: verificação de pacotes/documentação, instalação/atalhos, runtime
+headless/saves/reinício, reinstalação e desinstalação. Nenhum desses passos foi
+pulado. Resultado posterior à geração dos ZIPs; Windows gráfico, áudio físico,
+hardware e demais pendências permanecem.

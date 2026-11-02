@@ -137,3 +137,11 @@ repositório confirmou acesso de escrita. O remoto continha apenas o commit inic
 remover trabalho nem usar force push. Código e cinco pacotes0.4-dev seguem para
 publicação de desenvolvimento; confirmação remota e QA serão registrados depois
 que forem observados. Veja [Docs/PUBLICATION.md](Docs/PUBLICATION.md).
+
+## Publicação confirmada — 0.4.0-dev
+
+Código e pacotes estão em main, com históricos preservados, e a [prévia está
+publicada](https://github.com/teyranto7-cloud/Tribes-Of-Fire/releases/tag/v0.4.0-dev). O [QA Windows nativo](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41493048214) passou nos testes
+de instalação/atalhos/runtime headless/persistência/reinício/reinstalação/uninstall.
+Esse resultado substitui a pendência de execução headless Windows acima;
+não certifica Windows gráfico, microfone, hardware alvo, carga ou jogo completo.
