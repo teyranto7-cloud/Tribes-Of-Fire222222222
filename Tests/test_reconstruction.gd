@@ -95,7 +95,7 @@ func run() -> void:
 	check(Store.valid(original),"Expanded world and new player modules pass the version-four schema")
 	check(Store.save_world(original,game.save_folder)=="","The real expanded world writes successfully")
 	var restored: Dictionary = Store.load_world(game.save_folder)
-	check(restored.get("version")==4 and restored["world"]["seed"]==123 and restored["structures"].size()==4,"Reload preserves seed and every modular structure")
+	check(restored.get("version")==4 and restored["world"]["seed"]==123 and restored["structures"].size()==6,"Reload preserves seed and every modular structure")
 	check(restored["players"]["1"]["journal"]["markers"].size()==1,"Exploration markers persist in the player record")
 	var old: Dictionary = original.duplicate(true);old["version"]=3;old["seed"]=1337
 	old["players"]["1"]["position"]=[0,2,0]
@@ -130,8 +130,73 @@ func run() -> void:
 	var fire=game.world.fires[-1];fire.advance(1,true,false)
 	check(not fire.lit,"Rain extinguishes an uncovered fire")
 	check(fire.add_fuel(120) and fire.lit,"Refuelling relights a real fire")
-	game.running=false;Store.release_lock(game.save_folder)
-	game.runtime.audio.stop();game.runtime.voice.stop();game._stop_audio(game);game.session.close()
-	game.queue_free();await process_frame;await create_timer(0.6).timeout
+	game.player.position=fire_at+Vector3(1,0.1,0)
+	game.inventory.add("stone",4);game.inventory.add("fiber",2)
+	check(game.runtime._research(1,"knapping"),"Investing real materials unlocks the first technology")
+	check("knapping" in game.runtime.known_technologies(1),"Knowledge is visible to the authoritative player profile")
+	game.inventory.add("wood",6);game.inventory.add("stone",4)
+	check(game.runtime._research(1,"firecraft"),"Technology prerequisites and costs allow the next era")
+	check(game.runtime.Profile.era(game.runtime.known_technologies(1))==2,"Research advances the real crafting era")
+	var garden_at: Vector3=fire_at+Vector3(0,0,3)
+	var garden=game.world.add_structure("garden",garden_at,0,"1")
+	game.player.position=garden_at+Vector3(0,0.2,1)
+	game.inventory.add("berries",1)
+	await physics_frame;await physics_frame
+	check(game.runtime._plant(1,garden.structure_id,"berries"),"Planting consumes a real berry and creates a crop")
+	check(game.inventory.count("berries")==0,"Planting cannot keep or duplicate its input")
+	game.runtime._tick_farming(180)
+	check(game.runtime.farming[str(garden.structure_id)]["growth"]>=1,"A cultivated plot matures according to elapsed simulation time")
+	check(game.runtime._harvest_crop(1,garden.structure_id) and game.inventory.count("berries")==4,"Harvest returns the mature crop exactly once")
+	check(not game.runtime._harvest_crop(1,garden.structure_id),"A harvested crop cannot grant duplicate food")
+	check(game.world.fishes.size()==12,"The generated lake contains actual animated fish nodes")
+	game.inventory.add("spear",1)
+	for slot in range(36):
+		if game.inventory.serialize()["slots"][slot].get("id","")=="spear": game.inventory.equip(slot)
+	var fish=game.world.fishes[0]
+	game.player.position=fish.position+Vector3(0,1,1)
+	game.player.stamina=100
+	check(game.runtime._fish(1),"A spear and a nearby water population begin fishing")
+	var old_stock: int = game.world.fishes.reduce(func(total,item):return total+item.stock,0)
+	advance(4)
+	check(game.inventory.count("raw_fish")==1,"Completed fishing gives a real fish item")
+	check(game.world.fishes.reduce(func(total,item):return total+item.stock,0)==old_stock-1,"Fishing depletes the server-owned renewable population")
+	game.player.position=fire_at+Vector3(1,0.1,0)
+	check(game.runtime._enqueue_craft(1,"cooked_fish"),"A captured fish can enter the real campfire queue")
+	advance(2)
+	check(game.inventory.count("raw_fish")==0 and game.inventory.count("cooked_fish")==1,"Cooking converts the captured fish without duplication")
+	game.runtime.needs[1].hunger=40
+	game.runtime.command(1,"eat",{"item":"cooked_fish"})
+	check(game.runtime.needs[1].hunger>40 and game.inventory.count("cooked_fish")==0,"The cooked catch is actually consumed for nutrition")
+	var production: Dictionary = game.snapshot()
+	check(Store.valid(production) and Store.save_world(production,game.save_folder)=="","Research, tamed animals and fish stocks save together")
+	var persisted: Dictionary = Store.load_world(game.save_folder)
+	check(persisted["players"]["1"]["progression"]["learned"].size()==2 and persisted["animals"][0]["owner"]=="1","Progression and pet loyalty survive reload")
+	check(persisted["fishing"].reduce(func(total,item):return total+int(item["stock"]),0)==old_stock-1,"Fish population survives reload")
+	# World IDs can repeat across saves: neither old geometry nor ownership may
+	# survive replacing the world, even when the same IDs are present again.
+	var previous_loot_position: Vector3 = game.world.get_structure(3000).position
+	game.new_game(321)
+	game.player.set_physics_process(false)
+	var seeded_loot_position: Vector3 = game.world.sampler.locations[0]["position"] + Vector3(1,0,1)
+	check(game.world.get_structure(3000).position == seeded_loot_position and seeded_loot_position != previous_loot_position,"A new seed replaces same-ID loot geometry with the new seeded position")
+	check(game.world.structures.size()==2 and game.world.fires.is_empty() and game.world.shelters.is_empty(),"A new world clears previous player structures and fires")
+	check(game.world.resource_timers.is_empty() and game.world.cut_ids().is_empty(),"A new world cannot inherit resource regeneration or cut-tree state")
+	var replacement: Dictionary = game.snapshot()
+	var moved_at := Vector3(14,game.world.terrain_height(14,8),8)
+	replacement["structures"][0]["position"]=[moved_at.x,moved_at.y,moved_at.z]
+	replacement["structures"][0]["rotation"]=1
+	replacement["structures"][0]["owner"]="replacement-owner"
+	check(Store.save_world(replacement,game.save_folder)=="","A changed same-ID chest can be persisted")
+	check(game._begin_authority(Store.load_world(game.save_folder)),"The saved replacement world opens successfully")
+	game._spawn_player(1);game.player.set_physics_process(false)
+	var replaced = game.world.get_structure(3000)
+	check(replaced.position==moved_at and replaced.owner_key=="replacement-owner" and is_equal_approx(replaced.rotation.y,PI*0.5),"Reload updates same-ID position, owner and orientation")
+	replacement=game.snapshot()
+	replacement["structures"][0]["kind"]="wall"
+	replacement["structures"][0].erase("storage")
+	check(Store.save_world(replacement,game.save_folder)=="" and game._begin_authority(Store.load_world(game.save_folder)),"A save may replace the structural kind associated with a reused ID")
+	game._spawn_player(1);game.player.set_physics_process(false)
+	replaced=game.world.get_structure(3000)
+	check(replaced.kind=="wall" and replaced.is_in_group("wall") and not replaced.is_in_group("chest"),"Reload rebuilds physical geometry and groups when a reused ID changes kind")
 	print("RECONSTRUCTION CHECKS=%d FAILED=%d" % [checks,failed])
-	quit(1 if failed else 0)
+	await game.quit_game(1 if failed else 0,false)

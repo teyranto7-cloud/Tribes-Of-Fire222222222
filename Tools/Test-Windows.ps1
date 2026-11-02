@@ -66,13 +66,22 @@ function Read-WorldSnapshot([string]$Directory) {
         } finally { $Hasher.Dispose() }
         if ($Digest -cne $Envelope.digest) { throw 'Snapshot SHA256 does not match its payload.' }
         $Data = $Envelope.payload | ConvertFrom-Json
-        if ($Data.version -ne 3 -or $Data.seed -ne 1337 -or -not (Number-InRange $Data.phase 0 2700) -or $Data.players -isnot [pscustomobject]) { throw 'Invalid required world fields.' }
+        if ($Data.version -notin @(3, 4) -or -not (Number-InRange $Data.seed 0 2147483647 $true) -or -not (Number-InRange $Data.phase 0 21600) -or $Data.players -isnot [pscustomobject]) { throw 'Invalid required world fields.' }
+        $Extent = 61
+        $MinimumY = -15
+        $MaximumY = 40
+        if ($Data.version -eq 4) {
+            $World = $Data.world
+            if ($World -isnot [pscustomobject] -or $World.seed -ne $Data.seed -or $World.generator -notin @(0, 1)) { throw 'Invalid world descriptor.' }
+            if (($World.generator -eq 0 -and ($World.size -ne 128 -or $World.seed -ne 1337)) -or ($World.generator -eq 1 -and $World.size -ne 320)) { throw 'Unsupported generator dimensions.' }
+            if ($World.generator -eq 1) { $Extent = 161; $MinimumY = -30; $MaximumY = 120 }
+        } elseif ($Data.seed -ne 1337 -or $Data.phase -gt 2700) { throw 'Invalid legacy world.' }
         $Players = @($Data.players.PSObject.Properties)
         if ($Players.Count -lt 1 -or $Players.Count -gt 1024) { throw 'Expected at least one persisted player.' }
         foreach ($Player in $Players) {
             $Record = $Player.Value
             if (-not (Number-InRange $Record.hp 0 100 $true) -or $Record.position -isnot [array] -or $Record.position.Count -ne 3 -or $Record.inventory -isnot [pscustomobject]) { throw 'Invalid required player fields.' }
-            if (-not (Number-InRange $Record.position[0] -61 61) -or -not (Number-InRange $Record.position[1] -15 40) -or -not (Number-InRange $Record.position[2] -61 61)) { throw 'Invalid player position.' }
+            if (-not (Number-InRange $Record.position[0] (-$Extent) $Extent) -or -not (Number-InRange $Record.position[1] $MinimumY $MaximumY) -or -not (Number-InRange $Record.position[2] (-$Extent) $Extent)) { throw 'Invalid player position.' }
             foreach ($Required in @('axe', 'wood', 'campfire', 'shelter')) {
                 if ($null -eq $Record.inventory.PSObject.Properties[$Required]) { throw 'Missing inventory field.' }
             }

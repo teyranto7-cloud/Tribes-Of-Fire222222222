@@ -138,8 +138,10 @@ func _ready() -> void:
 			return
 	elif cli.has("join"):
 		join_game(str(cli["join"]), int(cli.get("port", 24567)), str(cli.get("password", "")))
+	elif cli.has("continue"):
+		load_game()
 	elif cli.has("play"):
-		new_game()
+		new_game(int(cli.get("seed",-1)))
 	print("GAME_READY role=%s Godot=%s" % [session.role, Engine.get_version_info()["string"]])
 
 func install_inputs() -> void:
@@ -168,9 +170,16 @@ func install_inputs() -> void:
 
 func _empty_world(seed_value: int = -1) -> Dictionary:
 	if seed_value < 0:
-		seed_value = int(Crypto.new().generate_random_bytes(4).decode_u32(0)) & 0x7fffffff
-	return {"version": 4, "seed": seed_value, "world": {"seed": seed_value, "generator": 1, "size": 320}, "players": {}, "cut": [], "fires": [],
-		"shelters": [], "phase": 450.0, "weather": WeatherModel.new().serialize()}
+		var entropy := Crypto.new().generate_random_bytes(4)
+		seed_value = (int(entropy.decode_u32(0)) if entropy.size()==4 else Time.get_ticks_usec()) & 0x7fffffff
+	var description := {"seed":seed_value,"generator":1,"size":320}
+	var sampler=WorldScript.Terrain.new(description)
+	var loot: Array = []
+	for place in sampler.locations:
+		var at: Vector3=place["position"]+Vector3(1,0,1)
+		loot.append({"id":int(place["id"]),"kind":"chest","position":[at.x,at.y,at.z],"rotation":0,"owner":"","hp":100,"open":false,"storage":{"berries":4,"fiber":4,"stone":4}})
+	return {"version":4,"seed":seed_value,"world":description,"players":{},"cut":[],"fires":[],"structures":loot,
+		"shelters":[],"phase":450.0,"weather":WeatherModel.new().serialize()}
 
 func _begin_authority(data: Dictionary) -> bool:
 	var error: String = Store.acquire_lock(save_folder)
@@ -326,6 +335,7 @@ func _spawn_player(id: int) -> void:
 	var origin: Array = record.get("position", [float(players.size()) * 1.5, world.terrain_height(float(players.size()) * 1.5, 0) + 0.2, 0])
 	body.position = Vector3(origin[0], origin[1], origin[2])
 	body.vitals.hp = int(record.get("hp", 100))
+	body.set_meta("death_handled", record.get("death_handled",false)==true)
 	body.vitals.regen_delay = _config_number(float(cli.get("regen-delay", "6")), 6, 0, 60)
 	body.vitals.quiet_seconds = float(record.get("quiet_seconds", 0.0))
 	players[id] = body
@@ -435,6 +445,7 @@ func _player_record(id: int) -> Dictionary:
 		"quiet_seconds": body.vitals.quiet_seconds, "exposure": exposures[id].state()}
 	record.merge(runtime.player_record(id), true)
 	record["journal"] = journal.serialize(session.player_key(id))
+	record["death_handled"] = body.get_meta("death_handled",false)==true
 	return record
 
 func snapshot() -> Dictionary:
@@ -443,7 +454,7 @@ func snapshot() -> Dictionary:
 		records[session.player_key(id)] = _player_record(id)
 	var description: Dictionary = world.descriptor()
 	var data := {"version": 4, "seed": description["seed"], "world": description, "players": records,
-		"rules": _saved_rules(), "structures": world.building_records(), "resource_timers": world.resource_timers.duplicate(), "fire_states": world.fire_states(), "cut": world.cut_ids(),
+		"rules": _saved_rules(), "structures": world.building_records(), "resource_timers": world.resource_timers.duplicate(), "fire_states": world.fire_states(), "fishing": world.fish_states(), "cut": world.cut_ids(),
 		"fires": world.fire_positions(), "shelters": world.shelter_positions(),
 		"phase": clock.elapsed, "weather": weather.serialize()}
 	data.merge(runtime.save_state(), true)
@@ -466,6 +477,7 @@ func network_state(recipient_id: int = 0) -> Dictionary:
 			state["progression"] = runtime.progression[id].state()
 			state["craft_queue"] = runtime.activities.queue(id).duplicate(true)
 			state["activity"] = runtime.activities.action_state(id)
+			state["is_admin"] = session.is_admin(id)
 			state["journal"] = journal.serialize(session.player_key(id))
 			state["shared_markers"] = journal.visible_markers(session.player_key(id), runtime.tribes).filter(func(marker): return marker.get("foreign", false))
 		bodies[str(id)] = state
@@ -474,7 +486,7 @@ func network_state(recipient_id: int = 0) -> Dictionary:
 		if not runtime.tribes.can_build(record["owner"], session.player_key(recipient_id)):
 			record.erase("storage")
 	var data := {"players": bodies, "world": world.descriptor(), "structures": building_data,
-		"resource_timers": world.resource_timers.duplicate(), "fire_states": world.fire_states(),
+		"resource_timers": world.resource_timers.duplicate(), "fire_states": world.fire_states(), "fishing": world.fish_states(),
 		"cut": world.cut_ids(), "fires": world.fire_positions(), "shelters": world.shelter_positions(),
 		"phase": clock.elapsed, "weather": weather.serialize(), "rules": _saved_rules()}
 	data.merge(runtime.save_state(), true)
@@ -487,10 +499,14 @@ func _receive_state(data: Dictionary) -> void:
 	snapshots_received += 1
 	running = true
 	world.configure_world(data.get("world", {"seed": 1337, "generator": 0, "size": 128}))
-	var signature: int = hash([data["cut"], data["fires"], data["shelters"], data.get("structures", []), data.get("fire_states", [])])
+	var signature: int = hash([data["cut"], data["fires"], data["shelters"], data.get("structures", []), data.get("fire_states", []), data.get("fishing", [])])
 	if signature != world_signature:
 		world.restore(data)
 		world_signature = signature
+	for field in data.get("rules",{}):
+		if field in server_rules: server_rules[field]=data["rules"][field]
+	clock.day_seconds=float(server_rules["day_minutes"])*60
+	clock.night_seconds=float(server_rules["night_minutes"])*60
 	clock.elapsed = float(data["phase"])
 	weather.restore(data["weather"])
 	runtime.apply_state(data)
@@ -508,6 +524,7 @@ func _receive_state(data: Dictionary) -> void:
 			session.set_local_profile_key(str(data["players"][key].get("key", "")))
 		if id == session.local_id:
 			var private: Dictionary = data["players"][key]
+			session.local_admin = private.get("is_admin",false)==true
 			runtime.needs[id].restore(private.get("survival", {}))
 			exposures[id].restore(private.get("exposure", {}))
 			runtime.progression[id].restore(private.get("progression", {}))
@@ -704,11 +721,12 @@ func _process(delta: float) -> void:
 		weather.advance(wall_delta)
 		if running:
 			var state: Dictionary = weather.state()
+			world.tick_world(wall_delta, true, bool(state["raining"]))
 			for id in players:
+				if players[id].vitals.hp<=0 and not players[id].get_meta("death_handled",false): _drop_death_items(id)
 				if not players[id].creation_pending:
 					runtime.needs[id].advance(wall_delta, players[id].vitals)
 					exposures[id].advance(wall_delta, bool(state["raining"]), world.is_sheltered(players[id]), players[id].vitals, world.warmth_at(players[id].position), runtime.safe(id))
-			world.tick_world(wall_delta, true, bool(state["raining"]))
 	_stream_timer += wall_delta
 	_journal_timer += wall_delta
 	if _stream_timer >= 0.25:
@@ -760,7 +778,7 @@ func _run_cli_checks(delta: float) -> void:
 				session.send_action("attack")
 				smoke_action_sent = true
 				smoke_attack_timer = 0.65
-		if smoke_progress > 4:
+		if smoke_progress > 4 and int(smoke_elapsed*2) != int((smoke_elapsed-delta)*2):
 			request_command("interact", {})
 		var collected := 0
 		for inv in inventories.values():
@@ -788,22 +806,42 @@ func quit_game(exit_code: int = 0, save_progress: bool = true) -> void:
 	if diagnostics != null:
 		diagnostics.record("shutdown", {"role": session.role if session != null else "starting"})
 	Store.release_lock(save_folder)
+	var audio_playbacks: Array[WeakRef] = []
+	_collect_audio_playbacks(self,audio_playbacks)
 	if runtime != null:
 		if runtime.audio != null: runtime.audio.stop()
 		if runtime.voice != null: runtime.voice.stop()
-	_stop_audio(self)
+	_stop_audio(self,true)
 	if session != null:
 		await session.graceful_leave()
-	# Spatial audio releases its mixer-thread playbacks asynchronously.
-	await get_tree().create_timer(0.5).timeout
+	# Let queued emitter deletion and cancellation of an in-flight world
+	# generation coroutine finish before checking mixer-owned references.
+	await get_tree().process_frame
+	# The mixer owns playback references asynchronously. Wait for their actual
+	# release instead of assuming a fixed delay is sufficient under CPU load.
+	var audio_started := Time.get_ticks_msec()
+	var audio_deadline := audio_started+2000
+	while audio_playbacks.any(func(playback): return playback.get_ref()!=null) and Time.get_ticks_msec()<audio_deadline:
+		await get_tree().create_timer(0.02).timeout
+	var audio_pending := audio_playbacks.filter(func(playback): return playback.get_ref()!=null).size()
+	if diagnostics != null:
+		diagnostics.record("audio_shutdown",{"elapsed_ms":Time.get_ticks_msec()-audio_started,"pending":audio_pending})
+	if audio_pending>0: push_warning("Audio mixer did not release %d playback(s) before shutdown deadline." % audio_pending)
 	get_tree().quit(exit_code)
 
-func _stop_audio(node: Node) -> void:
+func _collect_audio_playbacks(node: Node, playbacks: Array[WeakRef]) -> void:
+	if (node is AudioStreamPlayer or node is AudioStreamPlayer3D) and node.has_stream_playback():
+		playbacks.append(weakref(node.get_stream_playback()))
+	for child in node.get_children(): _collect_audio_playbacks(child,playbacks)
+
+func _stop_audio(node: Node, dispose: bool = false) -> void:
 	if node is AudioStreamPlayer or node is AudioStreamPlayer3D:
+		if node.has_stream_playback(): node.get_stream_playback().stop()
 		node.stop()
 		node.stream = null
 	for child in node.get_children():
-		_stop_audio(child)
+		_stop_audio(child,dispose)
+	if dispose and (node is AudioStreamPlayer or node is AudioStreamPlayer3D): node.queue_free()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST and session != null:
@@ -878,3 +916,18 @@ static func _config_number(value: Variant, fallback: float, minimum: float, maxi
 	return clampf(float(value), minimum, maximum)
 static func _config_bool(value: Variant, fallback: bool) -> bool:
 	return value if value is bool else fallback
+
+func _drop_death_items(id: int) -> void:
+	var body=players[id]
+	body.set_meta("death_handled",true)
+	var fraction: float = server_rules.get("death_loss",0.0)
+	if fraction<=0: return
+	var slots: Array = inventories[id].serialize()["slots"]
+	for index in range(slots.size()):
+		if slots[index].is_empty() or runtime.drops.size()>=128: continue
+		var quantity := ceili(int(slots[index]["count"])*fraction)
+		var taken: Dictionary = inventories[id].take_slot(index,quantity)
+		if taken.is_empty(): continue
+		var at: Vector3=body.position
+		at.y=world.terrain_height(at.x,at.z)+0.4
+		runtime._add_drop(taken["id"],taken["count"],at,int(taken.get("durability",100)))

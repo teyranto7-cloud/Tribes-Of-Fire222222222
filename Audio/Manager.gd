@@ -102,15 +102,11 @@ func _physics_process(_delta: float) -> void:
 func stop() -> void:
 	set_process(false)
 	set_physics_process(false)
-	ui.stop()
-	wind.stop()
-	for player in music: player.stop()
-	for player in pool:
-		if is_instance_valid(player): player.stop()
-
-	ui.stream = null
-	wind.stream = null
-	for player in music: player.stream = null
-	for player in pool:
-		if is_instance_valid(player): player.stream = null
+	for player in [ui,wind]+music+pool:
+		if not is_instance_valid(player): continue
+		# Stop the underlying loop before releasing the node's stream. Rapid
+		# world reloads can otherwise leave its mixer playback holding the WAV.
+		if player.has_stream_playback(): player.get_stream_playback().stop()
+		player.stop()
+		player.stream=null
 	cache.clear()

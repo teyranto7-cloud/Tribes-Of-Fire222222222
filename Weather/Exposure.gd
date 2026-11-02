@@ -29,8 +29,9 @@ func advance(delta: float, raining: bool, sheltered: bool, vitals,
 		while next_damage_at <= destination + 0.00000001:
 			_advance_health(vitals, exposure_seconds, next_damage_at, safe)
 			exposure_seconds = next_damage_at
-			vitals.damage(1)
-			damage_count += 1
+			if not near_fire:
+				vitals.damage(1)
+				damage_count += 1
 			next_damage_at += DAMAGE_INTERVAL
 		_advance_health(vitals, exposure_seconds, destination, safe)
 		exposure_seconds = destination
@@ -44,6 +45,9 @@ func _advance_health(vitals, start: float, finish: float, safe: bool) -> void:
 	var protected_time := maxf(0.0, minf(finish, GRACE_SECONDS) - start)
 	if protected_time > 0.0:
 		vitals.advance(protected_time, safe)
+	if comfort:
+		vitals.advance(maxf(0.0,finish-maxf(start,GRACE_SECONDS)),safe)
+		return
 	var harmful_time := maxf(0.0, finish - maxf(start, GRACE_SECONDS))
 	if harmful_time > 0.0 or finish >= GRACE_SECONDS:
 		# At the boundary itself clear a previously accumulated partial interval.

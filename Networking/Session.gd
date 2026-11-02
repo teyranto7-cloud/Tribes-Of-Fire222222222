@@ -35,6 +35,7 @@ var _rate: Dictionary = {}
 var _pending: Dictionary = {}
 var _keys: Dictionary = {}
 var _identity: String = ""
+var local_admin: bool = false
 var _leaving: bool = false
 var _world_owner: String = ""
 var server_options: Dictionary = ServerConfig.defaults()
@@ -181,6 +182,7 @@ func close() -> void:
 	_snapshot_out.clear()
 	_snapshot_in.clear()
 	_snapshot_sequence = 0
+	local_admin = false
 	_password = ""
 	_world_owner = ""
 	_leaving = false
@@ -630,7 +632,7 @@ func _identity_for_peer(id: int) -> String:
 	return _world_owner if identity == "1" else identity
 
 func is_admin(id: int) -> bool:
-	if not is_authority(): return false
+	if not is_authority(): return id == local_id and local_admin
 	if id == 1: return true # Local process owner; remote peers never get transport ID 1.
 	return accepted_peers.has(id) and _identity_for_peer(id) in server_options.get("admins", [])
 

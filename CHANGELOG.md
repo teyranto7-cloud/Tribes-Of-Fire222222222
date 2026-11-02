@@ -12,8 +12,8 @@ não declara aprovação de todos os requisitos.
   credenciais e chaves, inclusive se adicionados ao Git por engano.
 - Documentação de privacidade, componentes de terceiros e estado de lançamento
   acompanha os pacotes. Relatórios/imagens de auditoria são excluídos do PCK.
-- Infraestrutura Windows preparada para verificar atualização da0.3.1, migração
-  de saves e preferências, além de instalação limpa e desinstalação.
+- QA Windows seleciona pacotes por versão e valida descritores de mundo/schema4.
+  Atualização entre versões distintas e migração no Windows ainda precisam execução real.
 
 Consulte PROGRESS.md para as alterações de jogabilidade, gráficos, mundo,
 segurança e resultados observados nesta revisão.

@@ -31,7 +31,7 @@ func configure(value, _language: int = 0) -> void:
 		add_child(button)
 	var fov_label:=Label.new();fov_label.text=tr("Field of view");add_child(fov_label)
 	var fov:=HSlider.new();fov.min_value=45;fov.max_value=110;fov.step=1
-	fov.value=float(game.settings_manager.read("input","fov",70));add_child(fov)
+	fov.value=game._config_number(game.settings_manager.read("input","fov",70),70,45,110);add_child(fov)
 	fov.value_changed.connect(func(v):
 		game.settings_manager.write_sections({"input":{"fov":v}})
 		if game.player!=null: game.player.camera.fov=v)

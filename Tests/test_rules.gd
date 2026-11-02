@@ -134,13 +134,14 @@ func test_rain() -> void:
 	reset.advance(1, false, false, life)
 	check(reset.exposure_seconds == 0, "Fim da chuva reinicia contador")
 	reset.advance(55, true, false, life, true)
-	check(reset.damage_count == 2 and reset.comfort, "Fogueira aquece sem substituir telhado")
+	check(reset.damage_count == 1 and reset.comfort and is_equal_approx(reset.exposure_seconds,55),
+		"Reconstrução: calor interrompe perda sem reiniciar exposição ou secar como telhado")
 	var restored = Exposure.new()
 	restored.restore(reset.state())
 	restored.advance(14.99, true, false, life)
-	check(restored.damage_count == 2, "Restauração não antecipa próximo dano")
+	check(restored.damage_count == 1, "Sair do calor e restaurar não antecipa próximo dano")
 	restored.advance(0.01, true, false, life)
-	check(restored.damage_count == 3, "Restauração preserva intervalo de dano")
+	check(restored.damage_count == 2, "Sem calor, restauração preserva intervalo de dano")
 
 func test_weather() -> void:
 	var weather = Weather.new()

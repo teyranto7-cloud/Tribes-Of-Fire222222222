@@ -134,7 +134,7 @@ static func valid(data: Variant) -> bool:
 static func migrate(data: Dictionary) -> Dictionary:
 	var output := data.duplicate(true)
 	if int(data.get("version",1))<4:
-		for field in ["world","rules","structures","fire_states","resource_timers","resource_regrowth","tribe_research","farming"]: output.erase(field)
+		for field in ["world","rules","structures","fire_states","resource_timers","resource_regrowth","tribe_research","farming","fishing"]: output.erase(field)
 		for player in output.get("players",{}).values():
 			for field in ["journal","progression","craft_queue"]: player.erase(field)
 	if int(output.get("version", 0)) == 1:

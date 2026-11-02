@@ -403,6 +403,7 @@ func attack() -> bool:
 
 
 func respawn() -> void:
+	set_meta("death_handled",false)
 	_clear_intent()
 	attack_time = 0.0
 	dodge_cooldown = 0.0

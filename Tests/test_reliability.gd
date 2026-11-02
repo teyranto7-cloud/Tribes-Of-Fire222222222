@@ -43,6 +43,7 @@ func run() -> void:
 	check(loaded["drops"][0].get("durability") == 40, "Worn bag metadata survives checksum and reload")
 	game.runtime._restore_drops(loaded["drops"])
 	game.runtime.command(1, "interact", {})
+	game.runtime._tick_activities(0.6)
 	check(game.inventory.count("axe") == 1 and game.inventory.durability["axe"] == 40 and game.runtime.drops.is_empty(), "Picking the actual restored bag cannot repair the axe")
 	var invalid := snapshot.duplicate(true)
 	invalid["drops"][0]["durability"] = 101

@@ -224,6 +224,7 @@ func integration() -> void:
 	check(game.player.vitals.hp == 80, "Animal attack route caps a hit at twenty HP")
 	game.world.add_fire(game.player.position + Vector3(1, -0.1, 0))
 	game.runtime.command(1, "cook", {})
+	game.runtime._tick_activities(2)
 	check(game.inventory.count("cooked_meat") > 0, "Hunted meat cooks at an actual nearby fire")
 	game.player.position = Vector3(0, game.world.height_at(0, 0) + 0.1, 0)
 	game.player.rotation.y = 0
@@ -243,7 +244,7 @@ func integration() -> void:
 	game.inventories[1].add("berries", 4)
 	check(game.save_game(), "New profile, inventory and needs save together")
 	var saved: Dictionary = Store.load_world(game.save_folder)
-	check(saved.get("version") == 3 and saved["players"]["1"]["appearance"]["name"] == "Test Hero", "Version-three appearance persisted")
+	check(saved.get("version") == 4 and saved["players"]["1"]["appearance"]["name"] == "Test Hero", "Appearance persists through version-four migration")
 	check(saved["players"]["1"]["survival"]["hunger"] == 42 and Inventory.valid_state(saved["players"]["1"]["inventory_state"]), "Needs and exact slots persisted")
 	Store.release_lock(game.save_folder)
 	game.running = false

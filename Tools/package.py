@@ -22,6 +22,10 @@ LICENSES = ('Godot-LICENSE.txt', 'Godot-COPYRIGHT.txt', 'Noto-CJK-COPYRIGHT.txt'
 DOCS = ('README.md', 'ARCHITECTURE.md', 'PROGRESS.md', 'CREDITS.md', 'CHANGELOG.md', 'THIRD_PARTY.md',
         'Docs/COMMUNICATION.md', 'Docs/AUDIT.md', 'Docs/TEST_REPORT.md',
         'Docs/PRIVACY.md', 'Docs/RELEASE_READINESS.md',
+        'Docs/PENDENCIAS.md', 'Docs/RECONSTRUCTION_TEST_REPORT.md',
+        'Docs/PUBLICATION.md', 'Docs/RECONSTRUCTION_DIAGNOSIS.md',
+        'Docs/REQUEST_RECONSTRUCTION.md', 'Docs/REQUEST_RECONSTRUCTION_PART2.md',
+        'Docs/REQUEST_CONTENT.md', 'Docs/REQUEST_CONTINUITY_MASTER.md',
         'Tests/MANUAL.md', 'Tools/Test-Windows.ps1')
 
 

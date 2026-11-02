@@ -15,7 +15,7 @@ func configure(value) -> void:
 func _process(delta: float) -> void:
 	if game == null:
 		return
-	visible = bool(game.graphics.applied["performance"])
+	visible = bool(game.graphics.applied["performance"]) and game.session.is_admin(game.session.local_id)
 	if not visible or delta <= 0:
 		return
 	samples.append(delta)

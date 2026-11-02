@@ -31,7 +31,9 @@ func configure(value, _language: int = 0) -> void:
 	var instructions := Label.new()
 	instructions.text = "⇄ " + tr("Split") + ": Shift + drag"
 	add_child(instructions)
+	var era: int = game.runtime.Profile.era(game.runtime.known_technologies(game.session.local_id))
 	for id in Catalog.RECIPES:
+		if int(Catalog.recipe(id).get("era",0))>era: continue
 		var recipe_id: String = id
 		var button := Button.new()
 		var recipe: Dictionary = Catalog.recipe(id)

@@ -19,6 +19,7 @@ func hit_once() -> void:
 	game.player.attack_time = 0.0
 	game.player.stamina = 100.0
 	game._receive_action(1, "attack")
+	game.runtime._tick_activities(0.7)
 
 func run() -> void:
 	game = MainScene.instantiate()
@@ -41,21 +42,24 @@ func run() -> void:
 	hit_once()
 	hit_once()
 	hit_once()
-	check(not tree.felled and tree.hits == 2 and game.inventory.count("wood") == 9998,
-		"Inventário cheio não consome árvore nem concede madeira parcial")
+	check(tree.felled and game.runtime.drops.size() == 1 and game.inventory.count("wood") == 9998,
+		"Inventário cheio mantém a recompensa inteira no chão")
 	game.inventory.items["wood"] = 0
-	hit_once()
+	game.runtime.command(1, "interact", {})
+	game.runtime._tick_activities(0.6)
 	check(tree.felled and game.inventory.count("wood") == 4, "Árvore concede quatro madeiras uma única vez")
 	hit_once()
 	check(game.inventory.count("wood") == 4, "Novo golpe não duplica recompensa de árvore cortada")
 	game.inventory.items["wood"] = 8
 	game._receive_action(1, "craft_fire")
+	game.runtime._tick_activities(3)
 	check(game.inventory.count("wood") == 0 and game.inventory.count("campfire") == 1,
 		"Comando autoritativo fabrica fogueira com custo exato")
 	game._receive_action(1, "craft_fire")
+	game.runtime._tick_activities(3)
 	check(game.inventory.count("wood") == 0 and game.inventory.count("campfire") == 1,
 		"Comando sem recursos não altera inventário")
-	game.player.position = Vector3(0, game.world.height_at(0, 3) + 0.1, 3)
+	game.player.position = Vector3(0, game.world.terrain_height(0, 3) + 0.1, 3)
 	await physics_frame
 	var site: Dictionary = game.world.placement(game.player)
 	check(bool(site["valid"]), "Main encontra terreno livre para construção")
@@ -69,9 +73,10 @@ func run() -> void:
 		"Colisão recusa sobreposição sem consumir item")
 	game.inventory.items["wood"] = 12
 	game._receive_action(1, "craft_shelter")
+	game.runtime._tick_activities(5)
 	check(game.inventory.count("shelter") == 1 and game.inventory.count("wood") == 0,
 		"Abrigo também possui fabricação funcional")
-	var roof_at := Vector3(10, game.world.height_at(10, 0), 0)
+	var roof_at := Vector3(10, game.world.terrain_height(10, 0), 0)
 	game.world.add_shelter(roof_at)
 	game.player.position = roof_at + Vector3.UP * 0.05
 	await physics_frame
@@ -110,6 +115,6 @@ func run() -> void:
 	game.queue_free()
 	await process_frame
 	# Let the audio mixing thread release retired spatial playbacks after nodes exit.
-	await create_timer(0.15).timeout
+	await create_timer(0.6).timeout
 	print("GAMEPLAY CHECKS=%d FAILED=%d" % [checks, failed])
 	quit(0 if failed == 0 else 1)

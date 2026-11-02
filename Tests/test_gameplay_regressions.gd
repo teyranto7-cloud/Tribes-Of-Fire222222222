@@ -13,8 +13,12 @@ var physics_completed: bool = false
 
 class FlatWorld:
 	extends Node3D
-	func height_at(_x: float, _z: float) -> float:
+	func terrain_height(_x: float, _z: float) -> float:
 		return 0.0
+	func half_extent() -> float:
+		return 60.0
+	func has_terrain_at(_at: Vector3) -> bool:
+		return true
 
 func check(condition: bool, message: String) -> void:
 	checks += 1

@@ -6,6 +6,7 @@ const FireScript = preload("res://Building/Campfire.gd")
 const ShelterScript = preload("res://Building/Shelter.gd")
 const Foliage = preload("res://Assets/Shaders/foliage.gdshader")
 const WaterShader = preload("res://Assets/Shaders/water.gdshader")
+const Fish = preload("res://Animals/Fish.gd")
 const Terrain = preload("res://World/Terrain.gd")
 const Piece = preload("res://Building/Piece.gd")
 const Balance = preload("res://Game/Balance.gd")
@@ -17,6 +18,7 @@ var world_description: Dictionary = Terrain.LEGACY.duplicate(true)
 var sampler = Terrain.new()
 var water_level: float = -2.9
 var structures: Array = []
+var fishes: Array = []
 var resource_timers: Dictionary = {}
 var _cut_registry: Dictionary = {}
 var _chunks: Dictionary = {}
@@ -440,6 +442,9 @@ func restore(data: Dictionary) -> void:
 		for fire in fires:
 			if fire.position.distance_to(Vector3(p[0], p[1], p[2])) < 0.05: fire.restore_state(state)
 	restore_buildings(data.get("structures", []))
+	for fish in fishes: fish.restore({"stock":8,"restock_at":0.0})
+	for state in data.get("fishing",[]):
+		if int(state["id"])<fishes.size(): fishes[int(state["id"])].restore(state)
 
 func _restore_points(nodes: Array, positions: Array, kind: String) -> void:
 	for node in nodes.duplicate():
@@ -447,7 +452,7 @@ func _restore_points(nodes: Array, positions: Array, kind: String) -> void:
 		for p in positions:
 			if node.position.distance_to(Vector3(p[0], p[1], p[2])) < 0.01: found = true
 		if not found:
-			nodes.erase(node); remove_child(node); node.queue_free()
+			nodes.erase(node); _remove_world_object(node)
 	for p in positions:
 		var at := Vector3(p[0], p[1], p[2])
 		var found := false
@@ -578,20 +583,45 @@ func configure_world(description: Dictionary) -> void:
 	_chunks.clear()
 	for tree in trees: remove_child(tree); tree.queue_free()
 	trees.clear(); _tree_nodes.clear(); _chunk_records.clear(); _cut_registry.clear()
+	# World-local objects and their clocks must never survive a seed change.
+	for collection in [structures, fires, shelters]:
+		for node in collection:
+			_remove_world_object(node)
+		collection.clear()
+	resource_timers.clear()
 	for node in _poi_nodes: remove_child(node); node.queue_free()
 	_poi_nodes.clear()
+	for fish in fishes: remove_child(fish); fish.queue_free()
+	fishes.clear()
 	_build_tree_catalog()
 	for z in range(-1, 2):
 		for x in range(-1, 2): make_chunk(x * 16, z * 16)
 	if int(description["generator"]) == 0:
 		for z in range(-4, 4):
 			for x in range(-4, 4): make_chunk(x * 16, z * 16)
-	else: _make_points_of_interest()
+	else:
+		_make_points_of_interest()
+		for id in range(12):
+			var fish:=Fish.new();add_child(fish)
+			fish.setup(id,Vector3(sampler.lake_center.x+sin(id*2.4)*6,water_level-0.5,sampler.lake_center.y+cos(id*2.4)*6))
+			fishes.append(fish)
 	_place_grass(Vector3.ZERO)
 	for child in get_children():
 		if child is MeshInstance3D and child.mesh is PlaneMesh and child != cloud_mesh:
 			child.mesh.size = Vector2(480, 480)
 	update_streaming([Vector3.ZERO])
+
+func _remove_world_object(node: Node) -> void:
+	# Release mixer-thread playbacks while the emitter is still in the tree.
+	_stop_world_audio(node)
+	remove_child(node)
+	node.queue_free()
+
+func _stop_world_audio(node: Node) -> void:
+	if node is AudioStreamPlayer3D or node is AudioStreamPlayer:
+		node.stop()
+		node.stream = null
+	for child in node.get_children(): _stop_world_audio(child)
 
 func _build_tree_catalog() -> void:
 	var rng := RandomNumberGenerator.new()
@@ -699,6 +729,7 @@ func tick_world(delta: float, authoritative: bool, raining: bool) -> void:
 			resource_timers.erase(id); _cut_registry.erase(int(id))
 			if _tree_nodes.has(int(id)): _tree_nodes[int(id)].restore_cut(false)
 	for fire in fires: fire.advance(delta,raining,is_sheltered(fire))
+	for fish in fishes: fish.advance()
 
 func fire_states() -> Array:
 	var result: Array = []
@@ -756,9 +787,17 @@ func restore_buildings(records: Array) -> void:
 	for record in records:
 		var id := int(record["id"]); ids[id]=true
 		var piece = get_structure(id)
+		var p: Array = record["position"]
+		var at := Vector3(p[0], p[1], p[2])
+		if piece != null and (piece.kind != record["kind"] or piece.position != at or piece.owner_key != record["owner"] or not is_equal_approx(piece.rotation.y, int(record["rotation"]) * PI * 0.5)):
+			# IDs are scoped to a saved world. Rebuild the physical piece when its
+			# identity fields change; retaining its old mesh/collider leaks state.
+			structures.erase(piece)
+			remove_child(piece)
+			piece.queue_free()
+			piece = null
 		if piece == null:
-			var p: Array = record["position"]
-			piece = add_structure(record["kind"],Vector3(p[0],p[1],p[2]),record["rotation"],record["owner"],id)
+			piece = add_structure(record["kind"],at,record["rotation"],record["owner"],id)
 		if piece != null:
 			piece.hp = int(record["hp"]); piece.set_open(bool(record.get("open",false)))
 			piece.storage = record.get("storage",{}).duplicate(true); piece.bound_to = str(record.get("bound_to",""))
@@ -781,3 +820,6 @@ func _make_points_of_interest() -> void:
 				for z in [-4,4]:
 					Shapes.cylinder(node,0.6,3.2,Vector3(x,1.6,z),rock)
 					var shape:=CylinderShape3D.new();shape.radius=0.6;shape.height=3.2;Shapes.collider(node,shape,Vector3(x,1.6,z))
+
+func fish_states() -> Array:
+	return fishes.map(func(fish): return fish.state())

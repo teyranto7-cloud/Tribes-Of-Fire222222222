@@ -128,14 +128,5 @@ func run() -> void:
 	check(game.running and game.player != null and game.player.vitals.hp == 100,
 		"Continue restores the saved solo journey after a failed connection")
 
-	Store.release_lock(game.save_folder)
-	game.running = false
-	game.runtime.audio.stop()
-	game.runtime.voice.stop()
-	game._stop_audio(game)
-	game.session.close()
-	game.queue_free()
-	await process_frame
-	await create_timer(0.2).timeout
 	print("UI_REGRESSIONS CHECKS=%d FAILED=%d" % [checks, failed])
-	quit(0 if failed == 0 else 1)
+	game.quit_game(0 if failed == 0 else 1, false)

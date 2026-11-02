@@ -11,7 +11,7 @@ certifica que todos os requisitos de lançamento foram concluídos.
 | Privacidade | Docs/PRIVACY.md informa dados locais e transmissão ao servidor, voz opt-in e ausência de telemetria; revisão nativa/jurídica pendente |
 | Credenciais nos pacotes | Fonte usa manifesto Git quando disponível, respeita arquivos ignorados e recusa nomes privados mesmo se rastreados; testes com segredos fictícios |
 | Exportação/instalador | NSIS Unicode per-user, idiomas/atalhos/desinstalador; resultado de execução Windows deve ser conferido no workflow do commit publicado |
-| Atualização de versão | QA Windows preparado para instalar 0.3.1, abrir/gravar, atualizar e comprovar migração/preservação de dados; somente concluído após execução aprovada |
+| Atualização de versão | QA aceita schemas3/4 e seleciona pacote por versão; instalação limpa/reinstalação automatizadas. Upgrade de versão distinta e migração real no Windows continuam pendentes |
 | Assinatura digital | Nenhum certificado configurado; executáveis/instalador não assinados podem exibir alertas do sistema |
 | Distribuição Steam/lojas | Não publicada; cadastro, termos, contato, imagens, classificação e integração permanecem pendentes |
 | Requisitos mínimos/recomendados | Ainda não determinados por medições em GPU física; não divulgar números inventados |

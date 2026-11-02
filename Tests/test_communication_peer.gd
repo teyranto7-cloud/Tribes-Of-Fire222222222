@@ -48,16 +48,17 @@ func _process(delta: float) -> bool:
 	age += delta
 	if age > 42 and not finish:
 		printerr("COMMUNICATION_FAIL timeout role=", role, " phases=", phases.keys(), " audio=", audio_received)
-		quit(1)
+		finish = true
+		game.quit_game(1, false)
 	if game == null or not game.ready_world or not game.running: return false
 	if role == "server":
 		for label in ["A", "B", "C"]:
 			var id := named(label)
 			if id != 0:
 				var x := {"A": 0.0, "B": 8.0, "C": 45.0}[label] as float
-				game.players[id].position = Vector3(x, game.world.height_at(x, 0) + 0.1, 0)
+				game.players[id].position = Vector3(x, game.world.terrain_height(x, 0) + 0.1, 0)
 				if label == "B" and ready_age > 0 and age - ready_age > 13:
-					game.players[id].position = Vector3(0, game.world.height_at(0, -1.8) + 0.1, -1.8)
+					game.players[id].position = Vector3(0, game.world.terrain_height(0, -1.8) + 0.1, -1.8)
 		if ready_age < 0 and named("A") != 0 and named("B") != 0 and named("C") != 0:
 			ready_age = age
 		if blocked_seen_at > 0 and age - blocked_seen_at > 1.3 and not server_finishing:
@@ -66,7 +67,9 @@ func _process(delta: float) -> bool:
 			end_server()
 		return false
 	if game.player == null: return false
-	if not profile_sent:
+	# Main first completes the automatic headless creation handshake. Sending
+	# our custom profile before that acknowledgement races its default profile.
+	if not profile_sent and not game.player.creation_pending:
 		profile_sent = true
 		var profile := Appearance.DEFAULT.duplicate(true)
 		profile["name"] = "Client " + role
@@ -180,7 +183,7 @@ func verify() -> void:
 		ok = ok and int(audio_received.get("diplomacy", 0)) >= 2 and game.runtime.voice.played_samples > 0
 	if not ok:
 		printerr("COMMUNICATION_FAIL role=", role, " messages=", texts, " audio=", audio_received, " played=", game.runtime.voice.played_samples)
-		quit(1)
+		game.quit_game(1, false)
 		return
 	print("COMMUNICATION_CLIENT_PASS role=%s messages=%d audio_packets=%s played_samples=%d microphone_started=%s" % [role, texts.size(), audio_received, game.runtime.voice.played_samples, game.runtime.voice.microphone.playing])
 	game.quit_game()
@@ -188,7 +191,7 @@ func end_server() -> void:
 	await create_timer(2).timeout
 	if game.runtime.pvp_blocked < 2 or game.runtime.pvp_damage != 0:
 		printerr("COMMUNICATION_FAIL PvP protections not exercised: ", game.runtime.pvp_blocked)
-		quit(1)
+		game.quit_game(1, false)
 		return
 	print("COMMUNICATION_SERVER_PASS clients=3 routing=authority blocks=validated")
 	finish = true

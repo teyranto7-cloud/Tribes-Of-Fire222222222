@@ -41,6 +41,12 @@ static func extra(data: Dictionary, extent: float) -> bool:
 			if piece["kind"] != "chest" or not piece["storage"] is Dictionary or piece["storage"].size()>24: return false
 			for item in piece["storage"]:
 				if not item is String or not Catalog.known(item) or not number(piece["storage"][item],0,9999,true): return false
+	var fishes: Variant = data.get("fishing",[])
+	if not fishes is Array or fishes.size()>12: return false
+	var fish_ids: Dictionary = {}
+	for fish in fishes:
+		if not fish is Dictionary or not number(fish.get("id"),0,11,true) or fish_ids.has(int(fish["id"])) or not number(fish.get("stock"),0,8,true) or not number(fish.get("restock_at"),0,4102444800): return false
+		fish_ids[int(fish["id"])]=true
 	var timers: Variant = data.get("resource_timers",{})
 	if not timers is Dictionary or timers.size()>4096: return false
 	for key in timers:
@@ -70,6 +76,7 @@ static func extra(data: Dictionary, extent: float) -> bool:
 	for deadline in regrowth:
 		if not number(deadline,0,4102444800): return false
 	for player in data.get("players",{}).values():
+		if player.has("death_handled") and not player["death_handled"] is bool: return false
 		if player.has("journal") and not Journal.valid(player["journal"]): return false
 		if player.has("progression") and (not player["progression"] is Dictionary or not Profile.valid(player["progression"])): return false
 		if player.has("craft_queue") and (not player["craft_queue"] is Array or not Activities.valid_queue(player["craft_queue"])): return false

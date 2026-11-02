@@ -16,7 +16,7 @@ from source_manifest import private_path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ERROR = re.compile(r"(?:SCRIPT ERROR:|Parse Error:|^ERROR:)", re.MULTILINE)
+ERROR = re.compile(r"(?:SCRIPT ERROR:|Parse Error:|^ERROR:|ObjectDB instances leaked)", re.MULTILINE)
 
 
 def runtime_environment() -> dict[str, str]:
@@ -106,7 +106,7 @@ def main() -> None:
                               'test_gameplay.gd', 'test_v3.gd', 'test_gameplay_regressions.gd',
                               'test_tribes_regression.gd', 'test_ui_regressions.gd',
                               'test_voice_regressions.gd', 'test_reliability.gd',
-                              'test_startup_close.gd', 'test_runner.gd')
+                              'test_startup_close.gd', 'test_reconstruction.gd', 'test_runner.gd')
              if (ROOT / 'Tests' / name).is_file()]
     if not tests:
         raise SystemExit('No test runner found; refusing to export an untested build')

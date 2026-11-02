@@ -136,7 +136,7 @@ func restore(data: Dictionary) -> void:
 	farming = data.get("farming", {}).duplicate(true)
 	_restore_workshops(data.get("workshops", []))
 	_restore_drops(data.get("drops", []))
-	wildlife.restore(data.get("animals", wildlife.capture()), true)
+	wildlife.restore(data.get("animals", _fresh_animals()), true)
 func _restore_workshops(records: Array) -> void:
 	for station in workshops:
 		station.queue_free()
@@ -311,7 +311,9 @@ func command(id: int, action: String, data: Dictionary) -> void:
 								else:
 									pvp_blocked += 1
 						accepted = true
-			"eat": accepted = needs[id].eat(inv, str(data.get("item", "berries")))
+			"eat":
+				accepted = needs[id].eat(inv, str(data.get("item", "berries")))
+				if accepted: body.play_action("eat",0.9)
 			"cook": accepted = _enqueue_craft(id, "cooked_meat")
 			"drink":
 				if inv.count("water") > 0 and needs[id].thirst < 100:
@@ -378,6 +380,8 @@ func _event(kind: String, data: Dictionary) -> void:
 			messages.pop_front()
 		message_added.emit(data)
 		audio.click()
+	elif kind == "admin":
+		game.hud.notify_message(TranslationServer.translate("Action completed" if data.get("ok",false) else "Action unavailable"))
 	elif kind == "storage":
 		channel_state["storage"] = data
 		game.hud.show_panel("storage")
@@ -400,6 +404,7 @@ func _route_voice(id: int, sequence: int, packet: PackedByteArray, channel: Stri
 
 func _animal_damage(id: int, amount: int) -> void:
 	if game.session.is_authority() and game.players.has(id):
+		if game.server_rules.get("difficulty","normal")=="peaceful": return
 		var body = game.players[id]
 		body.vitals.damage(Combat.mitigate(clampi(amount, 0, 20), game.inventories[id], body.blocking, body.dodging > 0))
 		emit_sound("damage", body.position)
@@ -433,7 +438,7 @@ func _tick_activities(delta: float) -> void:
 		job["remaining"] = maxf(0,float(job["remaining"])-delta)
 		if job["remaining"]<=0 and game.inventories[id].add(job["recipe"],1):
 			entries.pop_front()
-			progression[id].award("crafting",Balance.number("progression","craft_xp",5))
+			progression[id].award("cooking" if job["recipe"] in ["cooked_meat","cooked_fish"] else "crafting",Balance.number("progression","cook_xp" if job["recipe"] in ["cooked_meat","cooked_fish"] else "craft_xp",5))
 			game.journal.record_event(key(id),"craft")
 			emit_sound("craft",game.players[id].position)
 	for id in activities.actions.keys():
@@ -453,7 +458,7 @@ func _tick_activities(delta: float) -> void:
 				inv.wear_equipment("hand",1)
 				if tree.hit():
 					game.world.record_tree_cut(tree.tree_id)
-					_add_drop("wood",Balance.integer("gathering","wood_yield",4),tree.position+Vector3.UP*0.3)
+					_add_drop("wood",maxi(1,roundi(Balance.integer("gathering","wood_yield",4)*float(game.server_rules["resource_rate"]))),tree.position+Vector3.UP*0.3)
 					progression[id].award("gathering",Balance.number("progression","gather_xp",4))
 					game.journal.record_event(key(id),"gather",4)
 			"pickup":
@@ -477,7 +482,9 @@ func _tick_activities(delta: float) -> void:
 				progression[id].award("hunting",Balance.number("progression","hunt_xp",10))
 				game.journal.record_event(key(id),"hunt")
 			"fish":
-				if _near_water(body) and inv.equipped_item()=="spear" and inv.add("raw_meat",1):
+				var fish_id:=int(meta.get("fish",-1))
+				if fish_id>=0 and fish_id<game.world.fishes.size() and _near_water(body) and inv.equipped_item()=="spear" and body.position.distance_to(game.world.fishes[fish_id].position)<7 and game.world.fishes[fish_id].stock>0 and inv.add("raw_fish",1):
+					game.world.fishes[fish_id].take()
 					progression[id].award("fishing",Balance.number("progression","fishing_xp",6))
 					game.journal.record_event(key(id),"fish")
 
@@ -545,6 +552,7 @@ func _chest_transfer(id: int, data: Dictionary) -> bool:
 		if int(chest.storage[item])<amount or not inv.add(item,amount): return false
 		chest.storage[item]=int(chest.storage[item])-amount
 		if chest.storage[item]==0: chest.storage.erase(item)
+	game.session.notify(id,"storage",{"id":chest.structure_id,"storage":chest.storage.duplicate(true)})
 	return true
 func _refuel(id: int) -> bool:
 	for fire in game.world.fires:
@@ -589,7 +597,12 @@ func _near_water(body) -> bool:
 func _fish(id: int) -> bool:
 	var body = game.players[id]
 	if not _near_water(body) or game.inventories[id].equipped_item()!="spear" or body.stamina<10 or Time.get_ticks_msec()<int(_fish_cooldowns.get(id,0)): return false
-	if not activities.start_action(id,"fish",Balance.number("fishing","duration",3.5)): return false
+	var chosen: int = -1
+	var distance: float = 7.0
+	for fish in game.world.fishes:
+		var current: float = fish.position.distance_to(body.position)
+		if fish.stock>0 and current<distance: chosen=fish.fish_id;distance=current
+	if chosen<0 or not activities.start_action(id,"fish",Balance.number("fishing","duration",3.5),{"fish":chosen}): return false
 	body.stamina-=10;_fish_cooldowns[id]=Time.get_ticks_msec()+6000;body.play_action("fish",3.5);return true
 func _plant(id: int, structure_id: int, crop: String) -> bool:
 	var piece = game.world.get_structure(structure_id)
@@ -616,3 +629,18 @@ func _update_crop_visuals() -> void:
 	for id in farming:
 		var piece = game.world.get_structure(int(id))
 		if piece!=null: piece.set_crop(farming[id]["crop"],farming[id]["growth"],farming[id]["water"])
+
+func _fresh_animals() -> Array:
+	var records: Array = _initial_animals.duplicate(true)
+	if int(game.world.descriptor()["generator"])==0: return records
+	var rng:=RandomNumberGenerator.new();rng.seed=int(game.world.descriptor()["seed"])+707
+	for row in records:
+		var at:=Vector3.ZERO
+		for attempt in range(100):
+			var angle: float = rng.randf()*TAU
+			var radius: float = 24+int(row["id"])*3
+			at=Vector3(sin(angle)*radius,0,cos(angle)*radius)
+			at.y=game.world.terrain_height(at.x,at.z)+0.05
+			if at.y>game.world.water_level+0.4: break
+		row["position"]=[at.x,at.y,at.z];row["home"]=row["position"].duplicate()
+	return records

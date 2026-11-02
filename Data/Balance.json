@@ -112,7 +112,9 @@
     "stamina": 10,
     "required_weapons": [
       "spear"
-    ]
+    ],
+    "maximum_stock": 8,
+    "restock_seconds": 300
   },
   "progression": {
     "xp_per_level": 25,
@@ -475,6 +477,15 @@
     "cooked_meat": {
       "cost": {
         "raw_meat": 1
+      },
+      "station": "campfire",
+      "time": 1.5,
+      "era": 0,
+      "category": "food"
+    },
+    "cooked_fish": {
+      "cost": {
+        "raw_fish": 1
       },
       "station": "campfire",
       "time": 1.5,

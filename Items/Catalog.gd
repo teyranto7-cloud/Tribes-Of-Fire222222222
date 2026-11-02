@@ -1,7 +1,7 @@
 extends RefCounted
 const Balance = preload("res://Game/Balance.gd")
 ## Stable item identifiers shared by authority, UI and save migration.
-const RESOURCES := ["wood", "stone", "fiber", "coal", "copper_ore", "tin_ore", "iron_ore", "silver_ore", "gold_ore", "sulfur", "rare_ore", "copper_ingot", "bronze_ingot", "iron_ingot", "steel_ingot", "raw_meat", "cooked_meat", "berries", "water", "leather", "bone", "arrow"]
+const RESOURCES := ["wood", "stone", "fiber", "coal", "copper_ore", "tin_ore", "iron_ore", "silver_ore", "gold_ore", "sulfur", "rare_ore", "copper_ingot", "bronze_ingot", "iron_ingot", "steel_ingot", "raw_meat", "cooked_meat", "raw_fish", "cooked_fish", "berries", "water", "leather", "bone", "arrow"]
 const WEAPONS := {"axe": 10, "club": 10, "spear": 15, "stone_sword": 12, "copper_sword": 17, "bronze_sword": 22, "iron_sword": 28, "steel_sword": 35, "bow": 16, "pickaxe": 5, "iron_pickaxe": 8}
 const ARMOR := {"leather_armor": 0.12, "bone_armor": 0.18, "copper_armor": 0.25, "bronze_armor": 0.32, "iron_armor": 0.45, "steel_armor": 0.55}
 const RECIPES := {
@@ -20,7 +20,7 @@ const RECIPES := {
 	"copper_armor": {"cost": {"copper_ingot": 3, "leather": 3}, "station": "workbench"},
 	"bronze_armor": {"cost": {"bronze_ingot": 3, "leather": 3}, "station": "workbench"},
 	"steel_armor": {"cost": {"steel_ingot": 3, "leather": 3}, "station": "workbench"},
-	"cooked_meat": {"cost": {"raw_meat": 1}, "station": "campfire"}}
+	"cooked_fish": {"cost": {"raw_fish": 1}, "station": "campfire"}, "cooked_meat": {"cost": {"raw_meat": 1}, "station": "campfire"}}
 static func ids() -> Array:
 	return ["axe", "wood", "campfire", "shelter"] + RESOURCES.filter(func(id): return id != "wood") + WEAPONS.keys().filter(func(id): return id != "axe") + ["shield"] + ARMOR.keys()
 static func known(id: String) -> bool:

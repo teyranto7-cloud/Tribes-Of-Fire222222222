@@ -229,6 +229,7 @@ func show_panel(value: String) -> void:
 			_network()
 		"settings":
 			_settings()
+		"admin": _admin()
 		"create_world": _create_world()
 		"help": _help()
 		"technology": _technology()
@@ -284,6 +285,7 @@ func _pause() -> void:
 		button(tr(entry[0]), func(): show_panel(destination))
 	button(tr("Return to main menu"), Callable(game,"return_to_menu"))
 	button(tr("Communication"), func(): show_panel("communication"))
+	if game.session.is_admin(game.session.local_id): button(tr("Administration"),func():show_panel("admin"))
 	button(t("Sair do jogo", "Quit game"), Callable(game, "quit_game"))
 	text(t("O tempo do mundo continua enquanto o processo está ativo.",
 		"World time continues while the process is running."), 14, MUTED)
@@ -476,10 +478,11 @@ func _storage() -> void:
 	var chest = game.world.get_structure(int(info.get("id",-1)))
 	if chest==null:
 		button(tr("Back"),func():show_panel(""));return
-	var items: Array = chest.storage.keys();items.sort()
+	var contents: Dictionary = info.get("storage",chest.storage)
+	var items: Array = contents.keys();items.sort()
 	for i in range(items.size()):
 		var index: int = i
-		button(tr("Take")+" · "+preload("res://Items/Catalog.gd").display_name(items[i])+" × "+str(chest.storage[items[i]]),func():game.request_command("chest_transfer",{"structure":chest.structure_id,"slot":index,"amount":1,"to_chest":false}))
+		button(tr("Take")+" · "+preload("res://Items/Catalog.gd").display_name(items[i])+" × "+str(contents[items[i]]),func():game.request_command("chest_transfer",{"structure":chest.structure_id,"slot":index,"amount":1,"to_chest":false}))
 	var slots: Array = game.inventory.serialize()["slots"]
 	for i in range(slots.size()):
 		if slots[i].is_empty(): continue
@@ -496,3 +499,21 @@ func apply_accessibility(config: Dictionary) -> void:
 	style.bg_color = Color("#080b0a") if contrast else Color(0.065,0.125,0.115,0.98)
 	style.border_color = Color.WHITE if contrast else Color("#a08052")
 	panel.add_theme_stylebox_override("panel",style)
+
+func _admin() -> void:
+	_heading(tr("Administration"))
+	if not game.session.is_admin(game.session.local_id):
+		button(tr("Back"),func():show_panel("pause"));return
+	var targets:=OptionButton.new();var keys:Array=[]
+	for id in game.players:
+		if id==game.session.local_id: continue
+		targets.add_item(game.players[id].appearance["name"]);keys.append(game.players[id].get_meta("key",""))
+	column.add_child(targets)
+	for action in ["kick","ban","mute","unmute"]:
+		var selected: String=action
+		button(tr(action.capitalize()),func():
+			if targets.selected>=0 and targets.selected<keys.size():game.session.send_admin_action(selected,{"target":keys[targets.selected]})).disabled=keys.is_empty()
+	button(tr("Save"),func():game.session.send_admin_action("save",{}))
+	var pvp:=CheckBox.new();pvp.text=tr("PvP enabled");pvp.button_pressed=game.server_rules["pvp"]=="on"
+	pvp.toggled.connect(func(v):game.session.send_admin_action("set_rule",{"rule":"pvp","value":"on" if v else "off"}));column.add_child(pvp)
+	button(tr("Back"),func():show_panel("pause"))

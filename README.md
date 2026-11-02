@@ -1,242 +1,201 @@
 # Tribes of Fire
 
-Criado por **felipealx** · **0.3.1-dev** · Godot 4.6.3 · Windows/Linux x64
+Criado por **felipealx** · código em desenvolvimento **0.4.0-dev** · Godot 4.6.3 · Windows/Linux x64
 
-Jogo de sobrevivência 3D em desenvolvimento, continuado a partir da base 0.1.
-Inclui solo, hospedagem por jogador e servidor dedicado autoritativo. Esta entrega
-corrige a versão 0.3.0 após auditoria e testes de regressão; ainda faltam requisitos
-obrigatórios para a versão 1.0.
-Consulte [PROGRESS.md](PROGRESS.md) para resultados e limitações verificáveis.
+Jogo de sobrevivência 3D em terceira pessoa, com modo solo, hospedagem por jogador
+e servidor dedicado autoritativo. A reconstrução continua a base existente; não é
+uma versão 1.0 concluída. Funcionalidades, resultados observados e critérios ainda
+pendentes estão em [PROGRESS.md](PROGRESS.md) e [Docs/PENDENCIAS.md](Docs/PENDENCIAS.md).
 
-## Download e código-fonte
+## Versões e downloads
 
-Pacotes **0.3.1-dev**, disponíveis neste repositório e sem necessidade do editor
-para jogar:
+A última versão **publicada** é **0.3.1-dev**. Estes links não contêm as alterações
+0.4.0-dev:
 
-- [Instalador Windows x64](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Windows-Setup.exe)
-- [Windows ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Windows.zip)
-- [Linux ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Linux.zip)
-- [Servidor dedicado Linux ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Server-Linux.zip)
-- [Fontes ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Source.zip)
-- [Hashes SHA256](Downloads/0.3.1-dev/SHA256SUMS.txt)
+- [Instalador Windows x64 0.3.1](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Windows-Setup.exe)
+- [Windows ZIP 0.3.1](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Windows.zip)
+- [Linux ZIP 0.3.1](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Linux.zip)
+- [Servidor Linux ZIP 0.3.1](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Server-Linux.zip)
+- [Código-fonte ZIP 0.3.1](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.1-dev/TribesOfFire-0.3.1-dev-Source.zip)
+- [SHA256 dos pacotes 0.3.1](Downloads/0.3.1-dev/SHA256SUMS.txt)
 
-Para clonar o projeto completo:
+A versão 0.4.0-dev foi exportada localmente para Windows, Linux e servidor Linux.
+A suíte completa passou em 458 verificações e o teste dos executáveis Linux passou
+em 6 verificações. O executável Windows foi gerado, mas ainda não foi testado em
+Windows nativo. Instalador NSIS e ZIPs Windows/Linux/servidor/fontes foram gerados localmente, com CRC e SHA256 verificados. Os novos pacotes não foram publicados. A tentativa atual de publicação foi interrompida:
+`api.github.com` recebeu bloqueio 403 do proxy, e o `gh` não conseguiu validar a
+autenticação disponível. Conforme a solicitação de continuidade, esse bloqueio não
+será contornado. O acesso à API e a credencial do ambiente precisam ser corrigidos
+antes do envio; nenhum token deve ser colado no chat ou adicionado aos arquivos.
+
+## Executar o código-fonte
+
+Instale **Godot 4.6.3 padrão**, sem .NET. Não há dependências pagas obrigatórias.
+Clone o repositório e importe `project.godot`; pressione F5:
 
 ```sh
 git clone https://github.com/teyranto7-cloud/Tribes-Of-Fire.git
 cd Tribes-Of-Fire
+godot --path .
 ```
 
-Para executar o código-fonte, instale o Godot 4.6.3 padrão, importe
-`project.godot` e pressione F5. Código, recursos, licenças, testes, presets e
-scripts de build acompanham o checkout. Os pacotes ficam em `Downloads/0.3.1-dev`;
-essa pasta é excluída dos exports e do ZIP de fontes para evitar incluir cópias
-dos pacotes dentro do próprio jogo.
+Um clone obtém somente o que já foi publicado. Para usar uma revisão local ainda
+não enviada, abra o checkout ou ZIP de fontes correspondente.
 
-## Jogar
+Escolha o idioma, uma nova jornada, a seed e o personagem. Mundos novos usam um
+terreno de **320 × 320 m** com geração determinística; saves anteriores preservam
+seu gerador de 128 × 128 m. Não é o continente final de 12 km solicitado.
 
-No Windows, execute `TribesOfFire-0.3.1-dev-Windows-Setup.exe`, ou extraia o ZIP
-Windows e abra `TribesOfFire.exe`. O instalador oferece seis idiomas, atalho na
-área de trabalho marcado por padrão, menu Iniciar, execução ao terminar e
-instalação por usuário, sem privilégios de administrador. A desinstalação preserva
-os saves. Esta versão passou pela [validação nativa Windows](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41394174603):
-instalação, documentação/atalhos, execução headless, saves/reinício, reinstalação
-e desinstalação em um runner limpo do GitHub.
-**Renderização e uso interativo em Windows 10/11 continuam pendentes.** Existe um roteiro automatizado em
-[Tools/Test-Windows.ps1](Tools/Test-Windows.ps1) para uma conta Windows de teste.
+Controles podem ser remapeados em Configurações; Ajuda mostra os comandos.
 
-No Linux, extraia o ZIP Linux, dê permissão de execução se necessário
-(`chmod +x TribesOfFire.x86_64`) e execute `./TribesOfFire.x86_64`.
-Os executáveis contêm os recursos e não precisam do editor Godot instalado.
-
-Selecione o idioma do jogo na primeira abertura, escolha **Nova jornada local**,
-crie seu personagem e confirme. A altura de 1,35–1,65 m e os ajustes de aparência
-são cosméticos: não alteram colisões, alcance ou dano. O idioma do instalador é
-independente do idioma do jogo. Nomes e mensagens de jogadores não são traduzidos.
-
-| Controle padrão | Ação |
+| Padrão | Ação |
 |---|---|
-| WASD / mouse / roda | Movimento / câmera / zoom |
+| WASD / mouse / roda | Mover / câmera / zoom |
 | Shift / Espaço / C / Q | Correr / pular / agachar / esquivar |
 | Clique esquerdo / direito / F | Usar ou atacar / defender / ataque forte |
-| E | Coletar recurso próximo, saquear animal/bolsa ou beber na fonte |
-| 1 / 2 / 3 | Ferramenta equipada / posicionar fogueira / posicionar abrigo |
-| Tab / Esc | Inventário e fabricação / menu |
-| Enter / V | Chat / pressionar para falar, após ativar voz |
-| F5 / F9 | Salvar / carregar no solo |
+| E | Interagir com recurso, material no chão, animal, água ou estrutura |
+| 1 / 2 / 3 | Ferramenta / fogueira / abrigo |
+| Tab / Esc / M | Inventário / menu / mapa |
+| R / F4 | Girar construção / alternar visão |
+| Enter / V | Chat / pressionar para falar, depois de ativar a voz |
+| F5 / F9 | Salvar / carregar no modo solo |
 
-Dê três golpes próximos em uma árvore para receber quatro madeiras. Duas árvores
-fornecem madeira para uma fogueira; três para um abrigo. Em Tab, fabrique e equipe
-a construção. Uma prévia verde indica local permitido. O abrigo possui teto e
-colisões reais; entre por uma lateral aberta. Fogueiras aquecem sem conceder
-imunidade à chuva. Perto delas é possível cozinhar carne obtida na caça.
+A coleta agora leva tempo: dê três golpes próximos em uma árvore e recolha os
+materiais que caírem. Fabricar reserva os recursos numa fila; cancelar devolve o
+custo quando há espaço. Use o inventário para equipar ferramentas e construir.
+Tecnologia e fabricação contém pesquisa, reabastecimento de fogueira, pesca com
+lança e cultivo de bagas próximo a um canteiro. Esses sistemas são versões mínimas
+funcionais, não a progressão completa proposta no relatório de conteúdo.
 
-Recolha pedra perto do início com E, fabrique uma picareta e equipe-a pelo
-inventário para minerar. Bancada e fornalha podem ser construídas pelo painel;
-as receitas avançadas exigem proximidade da estação correspondente. Arraste itens
-entre os 36 espaços; Shift ao arrastar divide a pilha. Equipar, comer e descartar
-alteram o inventário real. Bolsas descartadas são recuperáveis com E.
-A fonte potável azul está próxima ao início. Fome e sede diminuem com o tempo.
-Há morte e renascimento no ponto inicial; camas e respawn selecionável faltam.
+## Sistemas atuais
 
-## Multiplayer e comunicação
+- Terreno por seed, carregamento de chunks, árvores com IDs estáveis e rebrota,
+  biomas iniciais, litoral, rio/lago, caverna e ruína simples.
+- Personagem e vegetação com novas malhas originais, animação procedural, câmera
+  com colisão, corrida, agachamento, esquiva e equipamentos.
+- Inventário de 36 espaços, ferramentas e durabilidade, mineração, ações de coleta,
+  materiais físicos, filas/cancelamento/reparo e receitas junto a estações.
+- Peças modulares de madeira, portas físicas, telhados, cama vinculável, baús de
+  materiais e canteiros. Integridade estrutural e materiais avançados são parciais.
+- Fome, sede, combate, caça, consumo/cozimento, pesca com população persistida,
+  cultivo de bagas, domesticação básica, XP e pesquisa pessoal/tribal.
+- Sol/lua, dia/noite, transições climáticas, chuva, vento, relâmpagos/trovões,
+  cobertura física, combustível e calor das fogueiras.
+- Mapa com exploração e marcadores, ajuda, opções gráficas persistidas num único
+  `settings.cfg` e seis perfis com aplicação imediata.
+- ENet autoritativo, conexão por IP/senha, versão de protocolo, snapshots privados
+  por jogador e deltas, configuração de servidor e moderação por identidade.
+- Tribos, convites/liderança e proteção bilateral de 300 s após saída/expulsão;
+  chat e voz opt-in herdados da versão anterior.
 
-No menu escolha **Hospedar / Conectar por IP**. Porta padrão: **24567/UDP**.
-Um servidor e três clientes reais foram testados localmente. A opção administrativa
-aceita até 100 jogadores; essa capacidade **não foi comprovada por teste de carga**.
+O novo teste integrado cobre 83 verificações na cena real; a suíte completa soma
+458 verificações sem falhas. Passaram também 50 aberturas headless, rede com dois
+clientes, reconexão, migração para dedicado e comunicação com três clientes.
+Inspeção gráfica confirmou a apresentação atual, ainda geométrica e com traduções
+novas pendentes. Esses resultados não substituem carga, sessão de 30 min,
+dispositivos físicos ou execução em Windows.
+Consulte [o relatório desta reconstrução](Docs/RECONSTRUCTION_TEST_REPORT.md).
 
-    ./TribesOfFireServer.x86_64 --headless -- --server --port=24567 --save-dir=/caminho/mundo --max-players=16 --regen-delay=6
+## Multiplayer, servidor e comunicação
 
-O ZIP do servidor também inclui `start-server.sh`. O relógio continua enquanto o
-processo estiver ativo, mesmo sem jogadores. Dia de 30 minutos e noite de 15.
-Não há descoberta pública, senha, Steamworks ou abertura automática de NAT.
-O anfitrião precisa encaminhar a porta UDP no roteador para acesso pela Internet.
-Use esta conexão experimental em redes de confiança: ENet não criptografa o
-transporte e o token local ainda não substitui autenticação comercial.
+Escolha **Hospedar / Conectar por IP**. Porta padrão: **24567/UDP**. Para um
+servidor dedicado a partir do código-fonte:
 
-Menu **Comunicação**: jogadores, tribos, convites, saída, expulsão, transferência
-de liderança, grupos, salas diplomáticas, bloqueio e chamadas privadas aceitas.
-Dano entre membros da mesma tribo é recusado. Saída ou expulsão ativa proteção
-bidirecional de 300 segundos contra a antiga tribo, inclusive após reconexão.
-Não há ainda territórios, alianças, guerras, cercos ou oficiais com permissões.
+```sh
+godot --headless --path . -- --server --port=24567 --max-players=16 --save-dir=/caminho/mundo
+```
 
-Enter abre chat global, local (40 m), privado, grupo, tribo ou diplomacia.
-Comandos: `/global`, `/local`, `/tribo`, `/grupo`, `/msg ID mensagem`, `/ajuda`.
-Histórico limitado a 200 mensagens em memória; não há gravação do chat em disco.
+As opções de `Networking/server.example.json` podem ser copiadas para um arquivo
+privado e usadas com `--server-config=/caminho/server.json`. Não publique senhas,
+identidades, moderação ou saves. Um servidor existente mantém as regras salvas
+quando não são explicitamente substituídas pela configuração administrativa.
+Relógio padrão: dia de 30 minutos e noite de 15; avança enquanto o processo roda.
+Algumas regras ainda são parciais: a taxa de recursos afeta madeira; dificuldades
+normal e difícil ainda não possuem diferenciação completa.
 
-Voz vem **desativada em cada abertura**. Em Comunicação, escolha dispositivo,
-volume e sensibilidade, ative o microfone e use V. Há ativação por voz e teste
-local do microfone. Proximidade alcança 30 m; chamadas aceitas, tribos, grupos e
-salas diplomáticas autorizadas permitem áudio remoto. Bloqueio e mudo individuais
-são funcionais. O pipeline usa captura real Godot, IMA ADPCM a 16 kHz mono,
-ENet em canal separado, decodificação e reprodução com fila limitada. Não é Opus;
-eco, supressão de ruído e calibração com dispositivos físicos continuam pendentes.
-Veja [Docs/COMMUNICATION.md](Docs/COMMUNICATION.md).
+Senha e limite configurável não equivalem a autenticação comercial ou a suporte
+comprovado para 100 jogadores. ENet não criptografa o transporte; use redes de
+confiança nesta fase. Descoberta pública, Steamworks, predição avançada e abertura
+automática de NAT continuam pendentes. Para acesso externo, encaminhe a porta UDP.
 
-## Chuva e vida
+Chat: global, local, privado, grupo, tribo e diplomacia. Voz vem desativada em cada
+abertura; usa captura Godot, IMA ADPCM e reprodução espacial/autorizada. Opus,
+tratamento de eco e testes com microfones físicos não foram concluídos. Veja
+[Docs/COMMUNICATION.md](Docs/COMMUNICATION.md). Cenários locais de rede foram repetidos na 0.4.0-dev. A voz foi testada com áudio
+sintético, sem ativar microfone físico; isso não certifica estabilidade sob carga.
 
-Vida máxima de 100 HP. Exposição contínua: 0 dano até 40 s, primeiro dano de
-1 HP aos **55 s**, depois a cada 15 s (70/85/100; 17 HP brutos aos 300 s).
-Abrigo físico ou fim da chuva reinicia o contador. Intensidade não muda a taxa.
-Fogueiras melhoram conforto, mas não substituem o teto.
+## Vida, chuva e abrigo
 
-Conforme o prompt de auditoria mais recente, a regeneração só ocorre em condição
-segura: sem combate, fome/sede zeradas ou exposição nociva à chuva a partir de
-40 s. Cada dano impõe espera padrão de **6 s**, seguida de **1 HP a cada 3 s**
-seguros (primeiro HP aos 9 s após um golpe). `--regen-delay=0` elimina a espera
-adicional; intervalo configurável de 0 a 60 s. O servidor aplica todas essas regras.
+Vida máxima: 100 HP. Sem abrigo nem aquecimento válido, a chuva não causa dano nos
+primeiros 40 s; primeiro dano de 1 HP aos **55 s**, depois a cada 15 s. Cobertura
+física ou fim da chuva reinicia a exposição. Intensidade não muda a taxa.
 
-## Gráficos, som e idiomas
+A reconstrução permite que calor válido interrompa a perda por frio sem reiniciar
+esse contador; ao sair do calor, a exposição continua. Uma fogueira exposta pode
+ser apagada pela chuva e precisa de combustível. Isso não cria um teto visual.
+Proteção climática por roupas ainda está pendente.
 
-Médio é o padrão; Muito Baixo, Baixo, Médio, Alto, Ultra e Personalizado alteram
-vegetação, distância, sombras, iluminação, água e partículas. Há escala de
-renderização, antialiasing, resolução, modo de janela, VSync, FPS e painel de
-medição. Mudanças de resolução exigem confirmação em 15 s antes de serem salvas.
-`TribesOfFire.exe -- --safe` (ou `SafeMode.cmd`) abre com configurações
-conservadoras, sem apagar os dados pessoais. No Linux use `./TribesOfFire.x86_64 -- --safe`.
+Conforme os pedidos posteriores de auditoria, regeneração exige condição segura.
+Dano impõe espera padrão de 6 s, seguida de 1 HP a cada 3 s seguros. O servidor
+pode usar `--regen-delay=0` para eliminar a espera adicional. Fome/sede esgotadas,
+combate e exposição nociva suspendem regeneração. Consulte o diagnóstico e testes
+para a precedência dessas regras sobre os prompts antigos.
 
-Compatibility é o renderer utilizado. Reflexos são aproximações do ambiente;
-SSR, GI e iluminação volumétrica não são alegados. Opções incompatíveis são
-indicadas na interface. Arte, animação e música são originais em estágio inicial;
-não equivalem à qualidade cinematográfica final solicitada.
+## Gráficos, idiomas e dados pessoais
 
-Interface principal em português brasileiro, inglês, espanhol, francês, alemão
-e japonês, com fonte CJK incluída. Há 233 entradas por catálogo. Revisão linguística
-integral e tradução de alguns erros técnicos antigos ainda são necessárias.
-Som tem controles separados para música, ambiente, efeitos, interface, vocalizações
-e voz; música muda entre menu, criação, exploração, noite e combate.
+Muito Baixo, Baixo, Médio, Alto, Ultra e Personalizado alteram vegetação, distância,
+sombras, água e partículas. Mudar preset salva imediatamente; somente alterações
+de resolução/modo de janela usam confirmação de 15 s. Há sensibilidade, FOV,
+inversão vertical, escala da interface e opções iniciais de acessibilidade.
+`godot --path . -- --safe` abre com preferências conservadoras.
 
-## Desenvolver, testar e compilar
+O renderer é Compatibility. Reflexos são aproximações do ambiente; SSR, GI e
+volumetria não são alegados. Nenhuma meta de 60 FPS foi validada no hardware alvo.
+Há seis catálogos de idioma e fonte japonesa. Traduções novas e revisão linguística
+integral ainda precisam ser concluídas. Arte/animação também não são finais.
 
-Abra `project.godot` no Godot **4.6.3 padrão**, sem .NET. Não há dependências pagas.
-A versão desta entrega foi validada com 4.6.3; versões anteriores precisam de teste.
+Dados ficam em `user://`: normalmente `%APPDATA%/Godot/app_userdata/Tribes of Fire/`
+ou `~/.local/share/godot/app_userdata/Tribes of Fire/`. Preferências e identidade
+ficam fora da instalação. Preserve `identity.cfg` para recuperar o jogador; não o
+compartilhe. Para vários clientes na mesma máquina, use perfis XDG separados.
 
-    bash Tools/setup.sh
-    python3 Tools/build.py --test-only
-    python3 Tools/test_network.py
-    python3 Tools/test_multiplayer.py --keep-logs builds/logs
-    python3 Tools/test_reconnect.py
-    python3 Tools/test_host_migration.py
-    python3 Tools/test_communication.py --keep-logs builds/logs
-    python3 Tools/build.py
-    python3 Tools/test_exports.py --keep-logs builds/logs
-    python3 Tools/package.py
+Saves v4 preservam descritor do mundo, jogadores, itens, estruturas e módulos
+integrados, com migrações v1/v2/v3. Dois snapshots alternados possuem SHA256,
+validação, temporário verificado e lock exclusivo. Salvamento manual, automático
+a cada 45 s e ao sair normalmente. Não há WAL/fsync com garantia contra queda de
+energia. Após crash, pare os processos, faça backup e só então remova um lock
+obsoleto; nunca remova lock ativo. Dois slots corrompidos são recusados, preservados.
 
-Setup verifica SHA512 do editor/templates oficiais e usa APT verificado para
-NSIS local. O editor e testes ENet podem exigir sockets locais em sandboxes.
-Builds ficam em `builds/`, pacotes em `dist/`. O empacotador recusa fontes ou
-binários alterados após a exportação, verifica ZIPs e gera SHA256 e manifesto.
-Há ZIPs Windows, Linux, servidor Linux e código-fonte, além do instalador Windows.
+## Testar e gerar instalador/ZIPs
 
-`Tools/setup.sh` prepara o ambiente cloud Debian usado neste projeto. Para
-compilar localmente em outros sistemas, instale Godot 4.6.3, os export templates
-da mesma versão, Python 3.11 ou posterior para os scripts e NSIS 3.x para o
-instalador. Para jogar pelos pacotes, essas ferramentas não são necessárias.
+Requer Python 3.11+, Godot 4.6.3 e templates oficiais da mesma versão. NSIS 3.x é
+necessário para o instalador Windows. O script de setup prepara o ambiente cloud
+Debian; em outros sistemas instale essas ferramentas normalmente.
 
-## Dados e recuperação
+```sh
+bash Tools/setup.sh
+python3 Tools/build.py --test-only
+python3 Tools/test_settings_lifecycle.py --godot godot
+python3 Tools/test_network.py
+python3 Tools/test_multiplayer.py --keep-logs builds/logs
+python3 Tools/test_reconnect.py
+python3 Tools/test_host_migration.py
+python3 Tools/test_communication.py --keep-logs builds/logs
+python3 Tools/build.py
+python3 Tools/test_exports.py --keep-logs builds/logs
+python3 Tools/package.py
+```
 
-Dados pessoais em `user://`: normalmente
-`%APPDATA%/Godot/app_userdata/Tribes of Fire/` no Windows e
-`~/.local/share/godot/app_userdata/Tribes of Fire/` no Linux.
-Mundo padrão na subpasta `world`; `--save-dir=...` escolhe outra pasta.
-Idioma, gráficos, controles, volumes e identidade ficam fora da instalação.
-Preserve `identity.cfg` e não o compartilhe; ele permite recuperar o jogador.
-Ao transferir um mundo solo/hospedado para um dedicado, salve primeiro com esta
-versão usando a identidade original. O save passa a vincular o perfil do anfitrião
-a esse cliente. Mundos antigos sem esse vínculo não entregam o perfil ao primeiro
-cliente que se conectar.
-Para dois clientes na mesma máquina Linux, use diretórios XDG_DATA_HOME distintos.
+Os testes de presets aguardam 120 s reais por perfil e reiniciam os processos.
+A verificação adicional de 50 aberturas usa `python3 Tools/test_startup_stability.py`.
+Builds ficam em `builds/`, pacotes em `dist/`; o empacotador exige recibo de fontes
+e binários, verifica ZIPs e gera hashes. Produz instalador NSIS por usuário e ZIPs
+Windows, Linux, servidor e fontes. As três exportações 0.4.0-dev foram geradas e
+os executáveis Linux foram testados. A geração de ZIPs/NSIS não equivale à aprovação
+de instalação nativa. O QA Windows e o workflow foram adaptados estaticamente para
+a nova versão/schema/coordenadas; a execução nativa com os novos artefatos permanece
+pendente.
 
-Snapshots v3 alternados com SHA256, validação e migração v1/v2. Posições,
-inventários, aparência, fome/sede, chuva, animais, recursos, estruturas, tribos,
-grupos e bloqueios são persistidos. Chamadas exigem novo aceite após reinício.
-Salvamento manual, automático a cada 45 s e ao sair normalmente. Lock exclusivo
-impede escritores concorrentes. Após crash, pare todos os processos desse mundo,
-faça backup e só então remova `.writer-lock` para recuperação. Não remova um lock
-ativo. Se ambos os slots estiverem corrompidos, hospedar ou carregar recusa a
-operação sem substituí-los. Novas identidades são recusadas quando não há espaço
-para persistência, preservando os perfis existentes. Ainda não há journal/WAL nem garantia contra perda por queda de energia.
-
-Logs técnicos de inicialização e salvamento em `user://logs/`; não gravam conversas,
-áudio ou tokens. Arquitetura em [ARCHITECTURE.md](ARCHITECTURE.md), critérios e
-pendências em [Docs/AUDIT.md](Docs/AUDIT.md), roteiro manual em
-[Tests/MANUAL.md](Tests/MANUAL.md).
-
-## Verificação automática em Windows
-
-O workflow [Windows installer and runtime](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/workflows/windows-qa.yml)
-usa um runner Windows limpo para conferir o SHA256, instalar o pacote, verificar
-atalhos, iniciar o jogo sem interface gráfica, validar snapshots e reiniciar o
-servidor, reinstalar a mesma versão e desinstalar preservando dados. Os relatórios
-JSON/CSV e logs são publicados como artefato da execução. Consulte o resultado
-real em Actions; a existência do workflow não significa que ele passou.
-
-O modo headless não valida renderização, áudio físico, instalação interativa,
-Windows 10/11 em máquinas de jogadores ou desempenho. Esses testes continuam no
-roteiro manual. Para validar graficamente em uma conta Windows de teste, execute
-Tools/Test-Windows.ps1 sem a opção -Headless.
-
-Evidência anterior, referente à **0.3.0-dev**: [primeira execução Windows aprovada](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41380465249).
-Esse resultado corresponde ao teste headless descrito acima, com os pacotes
-publicados; não certifica renderização nem o conjunto completo da versão 1.0.
-
-## Correções da 0.3.1-dev
-
-A revisão corrigiu movimento após morte, perda/reparo indevido de durabilidade ao
-descartar e recuperar equipamento, coleta através de paredes, cozimento com
-inventário cheio, preferências inválidas que impediam abrir o jogo, teclas
-consumidas pela interface, lacuna no LOD e encerramento durante carregamento.
-Também protege saves corrompidos, limita históricos de tribos/perfis, mantém o
-relógio e a exposição à chuva em tempo real mesmo sob poucos FPS e melhora o
-escoamento da fila de voz.
-
-Foram executadas **372 verificações** de regras, integração, regressão e processos,
-além de seis verificações dos binários Linux e cenários reais de rede, reconexão e
-migração solo → dedicado. A comunicação passou nas duas repetições finais; uma
-execução concorrente anterior falhou por entregas de áudio ausentes. Isso permanece
-registrado como limite da validação sob carga, sem prometer transporte de voz livre
-de perdas. Detalhes e limites em [Docs/TEST_REPORT.md](Docs/TEST_REPORT.md).
-
-A [validação Windows da 0.3.1-dev](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41394174603) foi aprovada.
-[Logs e resultados da auditoria](https://github.com/teyranto7-cloud/Tribes-Of-Fire/tree/main/Docs/verification/0.3.1-dev)
-estão no repositório, incluindo a ocorrência anterior de comunicação que falhou.
+Arquitetura em [ARCHITECTURE.md](ARCHITECTURE.md), diagnóstico anterior às mudanças
+em [Docs/RECONSTRUCTION_DIAGNOSIS.md](Docs/RECONSTRUCTION_DIAGNOSIS.md), histórico
+0.3.1 em [Docs/verification/0.3.1-dev](Docs/verification/0.3.1-dev).
