@@ -123,7 +123,7 @@ def main() -> None:
     source_zip = out / f'TribesOfFire-{VERSION}-Source.zip'
     with zipfile.ZipFile(source_zip, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
         for directory, dirs, files in os.walk(ROOT):
-            dirs[:] = sorted(name for name in dirs if name not in {'.git', '.godot', 'builds', 'dist', '.local', '__pycache__'})
+            dirs[:] = sorted(name for name in dirs if name not in {'.git', '.godot', 'builds', 'dist', 'Downloads', '.local', '__pycache__'})
             for name in sorted(files):
                 path = Path(directory) / name
                 if path.is_symlink():

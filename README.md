@@ -7,6 +7,31 @@ Inclui solo, hospedagem por jogador e servidor dedicado autoritativo. Esta entre
 amplia a versão 0.2; ainda faltam requisitos obrigatórios para a versão 1.0.
 Consulte [PROGRESS.md](PROGRESS.md) para resultados e limitações verificáveis.
 
+## Download e código-fonte
+
+Pacotes **0.3.0-dev**, disponíveis neste repositório e sem necessidade do editor
+para jogar:
+
+- [Instalador Windows x64](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.0-dev/TribesOfFire-0.3.0-dev-Windows-Setup.exe)
+- [Windows ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.0-dev/TribesOfFire-0.3.0-dev-Windows.zip)
+- [Linux ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.0-dev/TribesOfFire-0.3.0-dev-Linux.zip)
+- [Servidor dedicado Linux ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.0-dev/TribesOfFire-0.3.0-dev-Server-Linux.zip)
+- [Fontes ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.3.0-dev/TribesOfFire-0.3.0-dev-Source.zip)
+- [Hashes SHA256](Downloads/0.3.0-dev/SHA256SUMS.txt)
+
+Para clonar o projeto completo:
+
+```sh
+git clone https://github.com/teyranto7-cloud/Tribes-Of-Fire.git
+cd Tribes-Of-Fire
+```
+
+Para executar o código-fonte, instale o Godot 4.6.3 padrão, importe
+`project.godot` e pressione F5. Código, recursos, licenças, testes, presets e
+scripts de build acompanham o checkout. Os pacotes ficam em `Downloads/0.3.0-dev`;
+essa pasta é excluída dos exports e do ZIP de fontes para evitar incluir cópias
+dos pacotes dentro do próprio jogo.
+
 ## Jogar
 
 No Windows, execute `TribesOfFire-0.3.0-dev-Windows-Setup.exe`, ou extraia o ZIP
@@ -138,6 +163,11 @@ NSIS local. O editor e testes ENet podem exigir sockets locais em sandboxes.
 Builds ficam em `builds/`, pacotes em `dist/`. O empacotador recusa fontes ou
 binários alterados após a exportação, verifica ZIPs e gera SHA256 e manifesto.
 Há ZIPs Windows, Linux, servidor Linux e código-fonte, além do instalador Windows.
+
+`Tools/setup.sh` prepara o ambiente cloud Debian usado neste projeto. Para
+compilar localmente em outros sistemas, instale Godot 4.6.3, os export templates
+da mesma versão, Python 3.11 ou posterior para os scripts e NSIS 3.x para o
+instalador. Para jogar pelos pacotes, essas ferramentas não são necessárias.
 
 ## Dados e recuperação
 

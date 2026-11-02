@@ -49,7 +49,7 @@ def run(engine: str, options: list[str], log_name: str, env: dict[str, str]) -> 
 
 def source_signature() -> str:
     digest = hashlib.sha256()
-    excluded = {'.git', '.godot', 'builds', 'dist', '.local', '__pycache__', 'Docs', 'Tests', 'Tools', 'LICENSES'}
+    excluded = {'.git', '.godot', '.github', 'builds', 'dist', 'Downloads', '.local', '__pycache__', 'Docs', 'Tests', 'Tools', 'LICENSES'}
     for directory, dirs, files in os.walk(ROOT):
         dirs[:] = sorted(name for name in dirs if name not in excluded)
         for name in sorted(files):

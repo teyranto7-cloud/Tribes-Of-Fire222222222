@@ -130,3 +130,13 @@ Depósitos e fauna são finitos nesta versão; alguns minérios não têm progre
 completa. Durabilidade é por tipo de item. Snapshots ainda compartilham inventários
 de outros jogadores. A matriz detalhada e critérios de liberação estão em
 Docs/AUDIT.md. Não publicar esta entrega como 1.0 nem prometer desempenho validado.
+
+## Entrega pelo repositório
+
+Código e pacotes são preparados para a branch main do repositório
+teyranto7-cloud/Tribes-Of-Fire. O README contém links para instalador e ZIPs em
+Downloads/0.3.0-dev, acompanhados de manifesto e SHA256. Essa pasta é excluída dos
+exports, da impressão digital runtime e do ZIP de fontes para impedir cópias
+recursivas. A suíte de 235 verificações e as três exportações foram repetidas
+após ajustar essas exclusões. O teste Windows aceita modo headless para CI;
+qualquer resultado Windows depende de execução real posterior, não desta preparação.
