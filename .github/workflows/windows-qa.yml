@@ -22,13 +22,14 @@ jobs:
       - name: Verify all packaged checksums and ZIP documentation
         shell: pwsh
         run: |
+          trap { Write-Output "::error::$($_.Exception.Message)"; exit 1 }
           $manifest = Get-Content -Raw 'Downloads/0.3.1-dev/manifest.json' | ConvertFrom-Json
           if (@($manifest.artifacts).Count -ne 5) { throw 'Expected five distribution artifacts.' }
           foreach ($item in $manifest.artifacts) {
             $path = Join-Path 'Downloads/0.3.1-dev' $item.name
             if ((Get-Item $path).Length -ne $item.size -or (Get-FileHash -Algorithm SHA256 $path).Hash.ToLowerInvariant() -ne $item.sha256) { throw "Artifact mismatch: $path" }
             if ($item.name.EndsWith('.zip')) {
-              $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $path))
+              $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $path).ProviderPath)
               try {
                 foreach ($doc in @('README.md', 'Docs/COMMUNICATION.md', 'Tests/MANUAL.md', 'Tools/Test-Windows.ps1')) {
                   if (@($zip.Entries | Where-Object { $_.FullName.EndsWith('/' + $doc) }).Count -ne 1) { throw "Missing ZIP documentation: $doc" }
