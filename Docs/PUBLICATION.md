@@ -1,5 +1,8 @@
 # Envio ao GitHub — 0.4.0-dev
 
+Este registro é histórico da 0.4. A auditoria/entrega atual 0.5 está em
+[PLAYABILITY_REPORT.md](PLAYABILITY_REPORT.md) e verification/0.5.0-dev.
+
 Destino: https://github.com/teyranto7-cloud/Tribes-Of-Fire.
 
 O bloqueio anterior de conexão à API (403) foi resolvido na configuração atual:

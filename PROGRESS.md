@@ -48,6 +48,11 @@ gerados (Windows, Linux e dedicado Linux), vinculados ao recibo de fontes/binár
 Cliente Linux, dedicado e reinício passaram **6 verificações**, sem editor.
 Servidor e dois clientes passaram movimento/coleta compartilhada e persistência.
 Logs e recibo em Docs/verification/0.5.0-dev; detalhes em Docs/PLAYABILITY_REPORT.md.
+As 50 aberturas/continuações reais passaram em 178,36 s, sem erro/leak observado.
+ZIP de fontes passou importação e jogo/save em diretório limpo (2 checks).
+Cliente Linux exportado abriu graficamente por 5 s em llvmpipe. Instalador NSIS
+e quatro ZIPs foram gerados e verificados com manifesto SHA256. QA Windows nativo
+0.5 será registrado após execução; a aprovação 0.4 não certifica o novo pacote.
 Não transferir automaticamente resultados 0.4 para uma revisão modificada.
 
 A inspeção gráfica usou display virtual Mesa llvmpipe; imagens reais de personagem,
