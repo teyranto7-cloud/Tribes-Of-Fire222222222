@@ -37,5 +37,6 @@ matriz de hardware continuam pendentes em PENDENCIAS.md. Não prometer 100%.
 
 Critério da Fase 0: import e cena real sem erro fatal; menus exercitados; export
 disponível abre/salva/reabre; checkpoint recuperável; recursos classificados e
-instalador testado por versão. A liberação da próxima fase será registrada após
-o resultado nativo do novo pacote; nenhuma próxima fase é executada automaticamente.
+instalador testado por versão. QA nativo 0.5 aprovado no run 41560599160; Fase 0
+concluída no escopo observado, próxima fase tecnicamente liberada. Nenhuma próxima
+fase é executada automaticamente; pendências de produto/hardware continuam abertas.

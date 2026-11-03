@@ -31,7 +31,7 @@ Evidências e contagens: [PLAYABILITY_REPORT.md](PLAYABILITY_REPORT.md).
 | Configurações | Implementado e testado no escopo básico | Settings autoload, Graphics/Settings, presets, resolução/confirmação, controles; hardware físico pendente |
 | Chat e voz | Parcial | Comunicação por canais e voz opt-in; regressões com áudio sintético, sem microfone/Opus/eco certificados |
 | Saves | Implementado e testado no escopo atual | Schema 4, migrações, slots alternados/checksum/lock, reinício/crash; sem garantia WAL/fsync contra energia |
-| Instalador e ZIPs | Em validação por coorte | Tools/package.py, NSIS, Test-Windows.ps1; recibo/hash; observar resultado nativo 0.5 separadamente da 0.4 |
+| Instalador e ZIPs | Implementado e testado no escopo automatizado | NSIS/ZIPs/recibo/hash; QA nativo 0.5 aprovado, logs preservados; Windows gráfico/upgrade entre versões pendentes |
 | Recursos/licenças | Inventariados | THIRD_PARTY.md, CREDITS.md, LICENSES; 20 WAV originais, fonte Noto, geometria/shaders originais; sem plugins externos |
 | Energia de rios/fiação | Ausente | Planejado; nenhum botão apresentado como sistema pronto |
 | Esteiras/automação complexa | Ausente | Três máquinas fixas não equivalem a uma rede industrial |

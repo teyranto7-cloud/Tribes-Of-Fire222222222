@@ -79,8 +79,22 @@ host; os exports release não liberam essa ação no gameplay público.
 ## Pacotes e limites
 
 Instalador NSIS por usuário e ZIPs Windows/Linux/dedicado/fontes usam a mesma
-coorte e hashes. A execução nativa do instalador 0.5 será registrada após observar
-o workflow Windows; a aprovação 0.4 não é transferida para ele.
+coorte e hashes. O [workflow nativo Windows 0.5 passou](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41560599160),
+incluindo checksums/documentação e 24 verificações de instalação, atalhos,
+runtime headless, restauração, reinstalação e desinstalação. Nenhum passo
+obrigatório foi ignorado. Relatório nativo e logs foram baixados e preservados;
+a aprovação é desta coorte. A matriz gráfica/manual continua pendente.
+
+[Prévia publicada](https://github.com/teyranto7-cloud/Tribes-Of-Fire/releases/tag/v0.5.0-dev),
+com os cinco pacotes e hashes versionados em Downloads/0.5.0-dev, fixados no commit
+`b8bedca4810fabcc8ebca5d9224f8848d0cf6fd4`. Os cinco links públicos responderam
+HTTP 200 com tamanho correto. O conteúdo runtime continua igual ao recibo.
+Relatórios internos dos pacotes registram o estado anterior à execução do CI;
+esta página e windows-report.json registram o resultado posterior observado.
+
+**Fase 0 concluída no escopo verificado; próxima fase tecnicamente liberada.**
+Nenhuma fase adicional será executada automaticamente. A liberação dos testes
+básicos não certifica os requisitos finais do produto.
 
 Evidências: [verification/0.5.0-dev](verification/0.5.0-dev).
 Guia: [PLAYABILITY.md](PLAYABILITY.md). Matriz: [FEATURE_MATRIX.md](FEATURE_MATRIX.md).

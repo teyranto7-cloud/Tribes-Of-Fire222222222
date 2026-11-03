@@ -23,7 +23,7 @@ São versões iniciais; dia/noite e geradores de saves antigos foram preservados
   Não há certificação de 60 FPS no Ryzen 5 4600G.
 - Microfones físicos, eco/Opus, gamepad, multimonitor/DPI e acessibilidade completa.
 - Atualização nativa entre versões diferentes, preservando perfis antigos.
-  O resultado do instalador 0.5 deve ser observado separadamente da aprovação 0.4.
+  O instalador 0.5 passou seus 24 checks nativos; isso não testa upgrade entre versões.
 - Traduções novas nos seis idiomas, animações/modelos finais e balanceamento.
 
 ## Conteúdo parcial ou ausente

@@ -13,6 +13,9 @@ pendentes estão em [PROGRESS.md](PROGRESS.md) e [Docs/PENDENCIAS.md](Docs/PENDE
 Windows/Linux, servidor Linux e fontes são gerados a partir dos testes e recibo
 congelado. O editor não é necessário para executar o jogo exportado.
 
+[Prévia publicada 0.5.0-dev](https://github.com/teyranto7-cloud/Tribes-Of-Fire/releases/tag/v0.5.0-dev)
+com downloads fixados no commit da entrega.
+
 - [Instalador Windows](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.5.0-dev/TribesOfFire-0.5.0-dev-Windows-Setup.exe)
 - [ZIP Windows](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.5.0-dev/TribesOfFire-0.5.0-dev-Windows.zip)
 - [ZIP Linux](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.5.0-dev/TribesOfFire-0.5.0-dev-Linux.zip)
@@ -195,8 +198,9 @@ e binários, verifica ZIPs e gera hashes. Produz instalador NSIS por usuário e 
 Windows, Linux, servidor e fontes. As três exportações 0.5.0-dev foram geradas e
 os executáveis Linux foram testados. A geração de ZIPs/NSIS não equivale à aprovação
 de instalação nativa. O workflow Windows valida a versão presente em Downloads;
-o resultado desta revisão será registrado em Docs/PLAYABILITY_REPORT.md após
-execução. A aprovação anterior 0.4 não é transferida para o novo instalador.
+o [QA nativo 0.5 passou](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41560599160):
+instalação, atalhos, abertura headless, saves/restauração, reinstalação e
+desinstalação, além de checksums/documentação de todos os pacotes.
 Renderização interativa Windows e dispositivos físicos continuam pendentes.
 
 Arquitetura em [ARCHITECTURE.md](ARCHITECTURE.md), diagnóstico anterior às mudanças

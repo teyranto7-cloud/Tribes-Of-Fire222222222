@@ -872,8 +872,8 @@
     },
     {
       "path": "PROGRESS.md",
-      "bytes": 5536,
-      "sha256": "0863cbd96b1166d549bedb35ec3e0105065bfc877b835d96c990ad7221fb4079"
+      "bytes": 5890,
+      "sha256": "c5a1500cfc44a8b812d81741f4f5213f4073a5aa03e2c0bc7efb039ba6dcdf9b"
     },
     {
       "path": "Persistence/SaveSchema.gd",
@@ -949,8 +949,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 11832,
-      "sha256": "977f68a451c1dce3223d779b8604a207b3694fa393139d16e1411c50c13276c4"
+      "bytes": 12073,
+      "sha256": "47e68af98c057b8034d208dd68e6464b6e4a68c67e9529094e8a03f5b0ec54ac"
     },
     {
       "path": "Scenes/Main.tscn",

@@ -52,7 +52,12 @@ As 50 aberturas/continuações reais passaram em 178,36 s, sem erro/leak observa
 ZIP de fontes passou importação e jogo/save em diretório limpo (2 checks).
 Cliente Linux exportado abriu graficamente por 5 s em llvmpipe. Instalador NSIS
 e quatro ZIPs foram gerados e verificados com manifesto SHA256. QA Windows nativo
-0.5 será registrado após execução; a aprovação 0.4 não certifica o novo pacote.
+0.5 aprovado: https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41560599160 .
+Instalação/atalhos/runtime headless/restauração/reinstalação/uninstall passaram
+em 24 verificações. Prévia v0.5.0-dev publicada com cinco downloads fixados no
+commit b8bedca; todos responderam HTTP 200 com tamanho correto. Fase 0 do novo
+plano concluída no escopo observado; próxima fase tecnicamente liberada,
+sem execução automática.
 Não transferir automaticamente resultados 0.4 para uma revisão modificada.
 
 A inspeção gráfica usou display virtual Mesa llvmpipe; imagens reais de personagem,

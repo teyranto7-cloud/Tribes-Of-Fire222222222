@@ -27,5 +27,6 @@ em snapshots; permissões de estruturas/inventários; arte/UX sem validação hu
 desempenho não medido no alvo; servidor sem autenticação comercial. Cada incremento
 deve registrar critério de aceitação e falha reproduzida antes da correção.
 
-**Próxima fase:** aguardar os resultados finais do pacote atual e o próximo
-pedido de fase do usuário. Não há garantia de produto concluído na Fase 0.
+**Próxima fase tecnicamente liberada:** suíte, exports e QA nativo Windows 0.5
+passaram. A execução de outro incremento aguarda o próximo pedido de fase do
+usuário. Não há garantia de produto concluído na Fase 0.
