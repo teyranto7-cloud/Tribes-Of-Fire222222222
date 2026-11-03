@@ -154,6 +154,13 @@ func capture() -> Array:
 func restore(data: Array, authoritative: bool = true) -> void:
 	if not valid_state(data): return
 	authority = authoritative
+	while animals.size()>data.size():animals.pop_back().queue_free()
+	while animals.size()<data.size():
+		var id:int=animals.size();var record:Dictionary=data[id]
+		var animal:=Animal.new();add_child(animal)
+		var p:Array=record["position"]
+		animal.setup(id,Animal.SPECIES.keys()[id%6],Vector3(p[0],p[1],p[2]),authoritative)
+		animals.append(animal)
 	for record in data:
 		animals[int(record["id"])].authoritative = authoritative
 		animals[int(record["id"])].apply_snapshot(record)
@@ -177,10 +184,10 @@ func harvest(body, inventory) -> bool:
 				return true
 	return false
 static func valid_state(data: Array) -> bool:
-	if data.size() != 12: return false
+	if data.size() not in [12,96]: return false
 	var seen: Array = []
 	for d in data:
-		if not d is Dictionary or not (d.get("id") is int or d.get("id") is float) or d["id"] != floorf(d["id"]) or d["id"] < 0 or d["id"] > 11 or d["id"] in seen or not Animal.SPECIES.has(d.get("species")):
+		if not d is Dictionary or not (d.get("id") is int or d.get("id") is float) or d["id"] != floorf(d["id"]) or d["id"] < 0 or d["id"] > 95 or d["id"] in seen or not Animal.SPECIES.has(d.get("species")):
 			return false
 		seen.append(d["id"])
 		if d.has("owner") and (not d["owner"] is String or d["owner"].length()>128): return false
@@ -190,7 +197,7 @@ static func valid_state(data: Array) -> bool:
 		for field in ["position", "home"]:
 			if not d.get(field) is Array or d[field].size() != 3: return false
 			for n in d[field]:
-				if not (n is int or n is float) or not is_finite(float(n)) or absf(float(n)) > 200: return false
+				if not (n is int or n is float) or not is_finite(float(n)) or absf(float(n)) > 1200: return false
 		for field in ["hp", "yaw", "age", "attack_left"]:
 			if not (d.get(field) is int or d.get(field) is float) or not is_finite(float(d[field])): return false
 		if d["hp"] < 0 or d["hp"] > int(Animal.SPECIES[d["species"]]["hp"]) or d["hp"] != floorf(d["hp"]) or d["age"] < 0 or d["attack_left"] < 0 or d["attack_left"] > 10 or not d.get("harvested") is bool or d.get("state") not in ["idle", "wander", "flee", "chase", "windup", "dead", "follow", "sleep", "return", "graze"]:
@@ -201,7 +208,7 @@ func configure_world() -> void:
 	var signature: int = hash(world.descriptor())
 	if signature==_layout_hash: return
 	_layout_hash=signature
-	cell_size=2.0 if world.half_extent()<=60 else 4.0
+	cell_size=2.0 if world.half_extent()<=60 else (8.0 if world.half_extent()>200 else 4.0)
 	var radius:=ceili(world.half_extent()/cell_size)
 	navigation.region=Rect2i(-radius,-radius,radius*2,radius*2)
 	navigation.cell_size=Vector2.ONE*cell_size;navigation.update()

@@ -19,7 +19,7 @@ static func normalize(value: Variant) -> Dictionary:
 	for key in ["name", "password", "pvp", "difficulty"]:
 		if not result[key] is String or result[key].to_utf8_buffer().has(0):
 			return {"error": "Invalid server text option: " + key, "data": {}}
-	if result["name"].strip_edges().is_empty() or result["name"].length() > 64 or result["password"].length() > 128 or result["pvp"] not in ["on", "off"] or result["difficulty"] not in ["peaceful", "normal", "hard"]:
+	if result["name"].strip_edges().is_empty() or result["name"].length() > 64 or result["password"].length() > 128 or result["pvp"] not in ["on", "off", "war"] or result["difficulty"] not in ["peaceful", "normal", "hard"]:
 		return {"error": "Invalid server name, password length or gameplay mode", "data": {}}
 	var limits := {"port": [1, 65535], "max_players": [1, 100], "seed": [0, 2147483647], "death_loss": [0, 1], "day_minutes": [1, 180], "night_minutes": [1, 180], "resource_rate": [0.25, 4]}
 	for key in limits:

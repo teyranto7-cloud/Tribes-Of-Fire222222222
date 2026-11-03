@@ -49,11 +49,5 @@ func run() -> void:
 	check(game.player.position.x < paused_origin.x - 1.0,
 		"Movimento volta a funcionar depois do inventario")
 	check(game.player.is_on_floor(), "Colisao com terreno se mantem no fluxo real")
-	Store.release_lock(game.save_folder)
-	game.running = false
-	game.session.close()
-	game.queue_free()
-	await process_frame
-	await create_timer(0.15).timeout
 	print("INPUT CHECKS=%d FAILED=%d" % [checks, failed])
-	quit(0 if failed == 0 else 1)
+	await game.quit_game(0 if failed == 0 else 1,false)

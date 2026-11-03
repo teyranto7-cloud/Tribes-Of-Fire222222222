@@ -106,15 +106,5 @@ func run() -> void:
 		"Carregar preserva cronômetros de exposição e regeneração")
 	game.exposure.advance(1, true, false, game.player.vitals)
 	check(game.exposure.damage_count == 1, "Primeiro dano continua aos 55s após carregar")
-	Store.release_lock(game.save_folder)
-	game.running = false
-	game.session.close()
-	game.runtime.audio.stop()
-	game.runtime.voice.stop()
-	game._stop_audio(game)
-	game.queue_free()
-	await process_frame
-	# Let the audio mixing thread release retired spatial playbacks after nodes exit.
-	await create_timer(0.6).timeout
 	print("GAMEPLAY CHECKS=%d FAILED=%d" % [checks, failed])
-	quit(0 if failed == 0 else 1)
+	await game.quit_game(0 if failed == 0 else 1,false)

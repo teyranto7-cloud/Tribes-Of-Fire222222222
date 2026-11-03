@@ -1,6 +1,7 @@
 extends CharacterBody3D
 ## Original articulated procedural animals. These meshes remain development art.
 const Shapes = preload("res://World/Shapes.gd")
+static var sound_cache:Dictionary={}
 const SPECIES := {
 	"rabbit": {"hp": 18, "speed": 4.8, "scale": 0.38, "damage": 0, "range": 0.0, "color": "#bba993", "loot": {"raw_meat": 1, "leather": 1}},
 	"deer": {"hp": 45, "speed": 5.5, "scale": 1.0, "damage": 0, "range": 0.0, "color": "#9b7550", "loot": {"raw_meat": 3, "leather": 2, "bone": 1}},
@@ -127,8 +128,9 @@ func visual_tick(delta: float, distance: float = 0.0) -> void:
 	if not authoritative and _has_replica:
 		position = position.lerp(_replica_position, 1 - exp(-12 * delta))
 		rotation.y = lerp_angle(rotation.y, _replica_yaw, 1 - exp(-12 * delta))
-	if avatar == null or distance > 65:
-		return
+	if avatar == null:return
+	visible=distance<85 and not harvested
+	if distance>65:return
 	if hp <= 0:
 		avatar.rotation.z = move_toward(avatar.rotation.z, 1.35, delta * 2.6)
 		indicator.text = ""
@@ -207,6 +209,7 @@ func apply_snapshot(data: Dictionary) -> void:
 	visible = not harvested
 
 static func animal_sound(kind: String) -> AudioStreamWAV:
+	if sound_cache.has(kind):return sound_cache[kind]
 	var data := PackedByteArray()
 	var frames := 8000
 	data.resize(frames * 2)
@@ -220,4 +223,5 @@ static func animal_sound(kind: String) -> AudioStreamWAV:
 	stream.format = AudioStreamWAV.FORMAT_16_BITS
 	stream.mix_rate = 22050
 	stream.data = data
+	sound_cache[kind]=stream
 	return stream

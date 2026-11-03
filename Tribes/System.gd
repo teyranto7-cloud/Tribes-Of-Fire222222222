@@ -3,6 +3,7 @@ extends RefCounted
 const MAX_MEMBERS := 100
 const MAX_PROTECTIONS := 2048
 const PROTECTION_SECONDS := 300.0
+var relations: Dictionary = {}
 var tribes: Dictionary = {}
 var invitations: Dictionary = {}
 var protections: Array = []
@@ -22,6 +23,8 @@ func command(actor: String, action: String, data: Dictionary, now: float = -1.0)
 	protections = protections.filter(func(p): return float(p["until"]) > now)
 	var id := tribe_of(actor)
 	var target := str(data.get("target", ""))
+	if action in ["tribe_war","tribe_alliance","tribe_accept_alliance","tribe_break_alliance","tribe_peace","tribe_accept_peace"]:
+		return diplomacy(actor,action,target,now)
 	match action:
 		"tribe_create":
 			var title := str(data.get("name", "")).strip_edges()
@@ -96,6 +99,8 @@ func can_damage(a: String, b: String, now: float = -1.0) -> bool:
 	var tb := tribe_of(b)
 	if ta != "" and ta == tb:
 		return false
+	var relation:Dictionary=relations.get(pair_key(ta,tb),{})
+	if relation.get("status","")=="allied" or float(relation.get("until",0))>now:return false
 	for p in protections:
 		if float(p["until"]) <= now:
 			continue
@@ -107,15 +112,24 @@ func can_build(owner: String, actor: String) -> bool:
 	return owner == actor or (tribe_of(owner) != "" and tribe_of(owner) == tribe_of(actor))
 
 func state() -> Dictionary:
-	return {"tribes": tribes.duplicate(true), "invitations": invitations.duplicate(true), "protections": protections.duplicate(true)}
+	return {"relations":relations.duplicate(true),"tribes": tribes.duplicate(true), "invitations": invitations.duplicate(true), "protections": protections.duplicate(true)}
 
 func restore(data: Dictionary) -> void:
 	if valid_state(data):
+		relations=data.get("relations",{}).duplicate(true)
 		tribes = data["tribes"].duplicate(true)
 		invitations = data["invitations"].duplicate(true)
 		protections = data["protections"].duplicate(true)
 
 static func valid_state(data: Dictionary) -> bool:
+	var ties:Variant=data.get("relations",{})
+	if not ties is Dictionary or ties.size()>2048:return false
+	for key in ties:
+		var row:Variant=ties[key]
+		if not key is String or key.length()>257 or key.split(":").size()!=2 or not row is Dictionary or row.size()!=4:return false
+		if row.get("status") not in ["neutral","war","allied"] or row.get("request") not in ["","peace","alliance"] or not row.get("requested_by") is String:return false
+		var until:Variant=row.get("until")
+		if not (until is int or until is float) or not is_finite(float(until)) or until<0 or until>4102444800:return false
 	if not data.get("tribes") is Dictionary or data["tribes"].size() > 64 or not data.get("invitations") is Dictionary or data["invitations"].size() > 1024 or not data.get("protections") is Array or data["protections"].size() > MAX_PROTECTIONS:
 		return false
 	for id in data["tribes"]:
@@ -133,3 +147,31 @@ static func valid_state(data: Dictionary) -> bool:
 		if not key is String or not invite is Dictionary or not invite.get("tribe") is String or not (invite.get("until") is float or invite.get("until") is int) or not is_finite(float(invite["until"])):
 			return false
 	return true
+
+static func pair_key(a: String,b: String) -> String:
+	return a+":"+b if a<b else b+":"+a
+func at_war(a: String,b: String) -> bool:
+	return not a.is_empty() and a!=b and relations.get(pair_key(a,b),{}).get("status","")=="war"
+func diplomacy(actor: String,action: String,target: String,now: float) -> bool:
+	var own:=tribe_of(actor)
+	if own.is_empty() or own==target or not tribes.has(target) or tribes[own]["leader"]!=actor:return false
+	var key:=pair_key(own,target)
+	if not relations.has(key) and relations.size()>=2048:return false
+	var row:Dictionary=relations.get(key,{"status":"neutral","request":"","requested_by":"","until":0.0}).duplicate()
+	match action:
+		"tribe_war":
+			if row["status"]=="allied" or float(row["until"])>now:return false
+			row["status"]="war";row["request"]="";row["requested_by"]=""
+		"tribe_alliance","tribe_peace":
+			row["request"]="alliance" if action=="tribe_alliance" else "peace";row["requested_by"]=own
+		"tribe_accept_alliance","tribe_accept_peace":
+			var request:="alliance" if action=="tribe_accept_alliance" else "peace"
+			if row["request"]!=request or row["requested_by"]!=target:return false
+			row["status"]="allied" if request=="alliance" else "neutral"
+			row["request"]="";row["requested_by"]=""
+		"tribe_break_alliance":
+			if row["status"]!="allied":return false
+			row["status"]="neutral";row["until"]=now+3600
+			row["request"]="";row["requested_by"]=""
+		_:return false
+	relations[key]=row;return true

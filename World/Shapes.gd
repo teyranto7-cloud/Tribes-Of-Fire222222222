@@ -106,7 +106,7 @@ static func sculpted_mesh(profile: Array, sides: int = 8, variation: int = 0) ->
 	for r in range(rings.size() - 1):
 		for side in range(sides):
 			var next := (side + 1) % sides
-			for v in [rings[r][side], rings[r + 1][side], rings[r][next], rings[r][next], rings[r + 1][side], rings[r + 1][next]]:
+			for v in [rings[r][side], rings[r][next], rings[r + 1][side], rings[r][next], rings[r + 1][next], rings[r + 1][side]]:
 				surface.set_color(Color.WHITE)
 				surface.set_uv(Vector2(atan2(v.z, v.x) / TAU + 0.5, v.y + 0.5))
 				surface.add_vertex(v)
@@ -115,7 +115,7 @@ static func sculpted_mesh(profile: Array, sides: int = 8, variation: int = 0) ->
 		var center := Vector3(float(profile[index][3]), float(profile[index][0]), float(profile[index][4]))
 		for side in range(sides):
 			var next := (side + 1) % sides
-			for v in ([center, rings[index][next], rings[index][side]] if top else [center, rings[index][side], rings[index][next]]):
+			for v in ([center, rings[index][side], rings[index][next]] if top else [center, rings[index][next], rings[index][side]]):
 				surface.set_color(Color.WHITE)
 				surface.set_uv(Vector2(v.x + 0.5, v.z + 0.5))
 				surface.add_vertex(v)

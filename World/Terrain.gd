@@ -2,6 +2,7 @@ extends RefCounted
 ## Immutable procedural sampler. It can also build vertex arrays on a worker.
 const LEGACY := {"seed": 1337, "generator": 0, "size": 128}
 const WATER_LEVEL := -2.9
+var changes: Dictionary = {}
 var settings: Dictionary
 var relief := FastNoiseLite.new()
 var detail := FastNoiseLite.new()
@@ -11,7 +12,8 @@ var locations: Array[Dictionary] = []
 var river_offset: float = 0.0
 var lake_center := Vector2.ZERO
 
-func _init(description: Dictionary = LEGACY) -> void:
+func _init(description: Dictionary = LEGACY, edits: Dictionary = {}) -> void:
+	changes=edits.duplicate(true)
 	settings = description.duplicate(true)
 	var seed_value := int(settings.get("seed", 1337))
 	for index in range(4):
@@ -28,6 +30,14 @@ func _init(description: Dictionary = LEGACY) -> void:
 	var ruins := Vector2(rng.randf_range(65, 95), rng.randf_range(-65, -35))
 	locations.append({"kind": "cave", "position": Vector3(cave.x, raw_height(cave.x, cave.y), cave.y), "id": 3000})
 	locations.append({"kind": "ruins", "position": Vector3(ruins.x, raw_height(ruins.x, ruins.y), ruins.y), "id": 3001})
+	if int(settings.get("generator",0))>=2:
+		for i in range(8):
+			var a:=float(i)*TAU/8+rng.randf_range(-0.12,0.12)
+			var p:=Vector2(cos(a),sin(a))*rng.randf_range(350,510)
+			for attempt in range(80):
+				if raw_height(p.x,p.y)>1.0: break
+				p.x+=2
+			locations.append({"kind":"monument","position":Vector3(p.x,raw_height(p.x,p.y),p.y),"id":3010+i})
 
 static func legacy_height(x: float, z: float) -> float:
 	return sin(x * 0.052) * 1.6 + cos(z * 0.047) * 1.4 + sin((x + z) * 0.031) * 0.8
@@ -38,6 +48,7 @@ func river_x(z: float) -> float:
 func raw_height(x: float, z: float) -> float:
 	if int(settings.get("generator", 0)) == 0:
 		return legacy_height(x, z)
+	if int(settings.get("generator", 0)) >= 2: return living_height(x,z)
 	var continental := relief.get_noise_2d(x, z)
 	var ridges := pow(maxf(0, absf(relief.get_noise_2d(x + 420, z - 310)) - 0.18), 1.8) * 40.0
 	var value := 3.0 + continental * 7.0 + detail.get_noise_2d(x, z) * 1.2 + ridges
@@ -61,7 +72,11 @@ func height(x: float, z: float) -> float:
 			var radius := 9.0 if place["kind"] == "cave" else 11.0
 			var flatten := 1.0 - smoothstep(radius - 3.0, radius, Vector2(x - p.x, z - p.z).length())
 			value = lerpf(value, p.y, flatten)
-	return value
+	var gx:=floori(x/4.0);var gz:=floori(z/4.0)
+	var sx:=fposmod(x,4.0)/4.0;var sz:=fposmod(z,4.0)/4.0
+	var depths:Array=[]
+	for cell in [Vector2i(gx,gz),Vector2i(gx+1,gz),Vector2i(gx,gz+1),Vector2i(gx+1,gz+1)]: depths.append(float(changes.get("%d,%d"%[cell.x,cell.y],0)))
+	return value-lerpf(lerpf(depths[0],depths[1],sx),lerpf(depths[2],depths[3],sx),sz)
 
 func biome(x: float, z: float) -> String:
 	var elevation := height(x, z)
@@ -114,3 +129,22 @@ func chunk_arrays(x0: int, z0: int) -> Array:
 	arrays[Mesh.ARRAY_NORMAL] = normals
 	arrays[Mesh.ARRAY_COLOR] = colors
 	return arrays
+
+# Generator 2 is separate: historical worlds retain their exact height function.
+func living_height(x: float, z: float) -> float:
+	var distance := Vector2(x,z).length()
+	var ridges := pow(1.0-absf(relief.get_noise_2d(x*0.32+470,z*0.32-190)),3.0)
+	var highlands := smoothstep(85,240,distance)*smoothstep(0.35,0.75,moisture.get_noise_2d(x*0.32,z*0.32)+0.5)
+	var value := 5.0+relief.get_noise_2d(x*0.65,z*0.65)*12.0+detail.get_noise_2d(x,z)*1.5+ridges*highlands*48.0
+	value=lerpf(legacy_height(x,z),value,smoothstep(16,42,distance))
+	var coast:=smoothstep(620,755,maxf(absf(x),absf(z)))
+	value=lerpf(value,-12.0,coast)
+	var river_distance:=absf(x-river_x(z))
+	var valley:=1.0-smoothstep(15.0,40.0,river_distance)
+	var bank:=WATER_LEVEL+0.6+maxf(0,river_distance-10.0)*0.22
+	value=lerpf(value,minf(value,bank),valley)
+	var channel:=1.0-smoothstep(7.0,15.0,river_distance)
+	# Navigable continuous main river: at least 14 m wide and 3 m deep.
+	value=lerpf(value,WATER_LEVEL-3.5,channel)
+	var lake:=1.0-smoothstep(18.0,29.0,Vector2(x,z).distance_to(lake_center))
+	return lerpf(value,WATER_LEVEL-4.0,lake)

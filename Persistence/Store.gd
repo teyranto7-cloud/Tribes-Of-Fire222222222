@@ -57,15 +57,15 @@ static func valid(data: Variant) -> bool:
 				return false
 	var modern: bool = int(data["version"]) == 4
 	if modern and not SaveSchema.descriptor(data): return false
-	var extent := 161.0 if modern and int(data["world"]["generator"]) == 1 else 61.0
+	var extent := float(data["world"]["size"])*0.5+1.0 if modern and int(data["world"]["generator"]) > 0 else 61.0
 	if not integer(data.get("seed"), 0 if modern else 1337, 2147483647 if modern else 1337) or not number(data.get("phase"), 0, 21600 if modern else 2700):
 		return false
 	var cut: Variant = data.get("cut")
-	if not cut is Array or cut.size() > (4096 if modern else 160):
+	if not cut is Array or cut.size() > (16384 if modern else 160):
 		return false
 	var seen: Dictionary = {}
 	for id in cut:
-		if not integer(id, 0, 8191 if modern else 159) or seen.has(int(id)):
+		if not integer(id, 0, 65535 if modern else 159) or seen.has(int(id)):
 			return false
 		seen[int(id)] = true
 	if not positions_valid(data.get("fires"), 32, extent):
@@ -110,7 +110,7 @@ static func valid(data: Variant) -> bool:
 	if data.has("animals") and (not data["animals"] is Array or not Wildlife.valid_state(data["animals"])):
 		return false
 	if data.has("mining"):
-		if not data["mining"] is Array or data["mining"].size() != 22:
+		if not data["mining"] is Array or (data["mining"].size() < 22 or data["mining"].size() > 256):
 			return false
 		for value in data["mining"]:
 			if not integer(value, 0, 8):
@@ -123,8 +123,9 @@ static func valid(data: Variant) -> bool:
 		for record in data[field]:
 			if not record is Dictionary or not position_valid(record.get("position"), extent):
 				return false
-			if field == "workshops" and (record.get("kind") not in ["workbench", "furnace"] or not record.get("owner") is String or record["owner"].length() > 128):
+			if field == "workshops" and (record.get("kind") not in ["workbench", "furnace", "sawmill", "loom", "crusher"] or not record.get("owner") is String or record["owner"].length() > 128):
 				return false
+			if field=="workshops" and record.has("machine") and not preload("res://Building/Factory.gd").valid(record["machine"]): return false
 			if field == "drops" and (not record.get("id") is String or not Catalog.known(record["id"]) or not integer(record.get("count"), 1, 9999)):
 				return false
 			if field == "drops" and record.has("durability") and not integer(record["durability"], 0, 100):

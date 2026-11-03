@@ -213,7 +213,7 @@ func integration() -> void:
 	check(game.player.avatar.get_child(game.player.avatar.get_child_count() - 1).skeleton.get_bone_count() == 9, "Model uses live skeletal attachments")
 	game.runtime.needs[1].hunger = 42
 	var wildlife = game.runtime.wildlife
-	check(wildlife.animals.size() == 12 and preload("res://Animals/Director.gd").valid_state(wildlife.capture()), "Six animal species are instantiated and serializable")
+	check(wildlife.animals.size() == 96 and preload("res://Animals/Director.gd").valid_state(wildlife.capture()), "Six animal species are instantiated and serializable")
 	var animal = wildlife.animals[0]
 	game.player.position = animal.position + Vector3(0, 0, 1)
 	check(wildlife.hit(animal, 35) and animal.hp == 0, "Authoritative hunting produces a corpse")
@@ -246,10 +246,4 @@ func integration() -> void:
 	var saved: Dictionary = Store.load_world(game.save_folder)
 	check(saved.get("version") == 4 and saved["players"]["1"]["appearance"]["name"] == "Test Hero", "Appearance persists through version-four migration")
 	check(saved["players"]["1"]["survival"]["hunger"] == 42 and Inventory.valid_state(saved["players"]["1"]["inventory_state"]), "Needs and exact slots persisted")
-	Store.release_lock(game.save_folder)
-	game.running = false
-	game.runtime.voice.stop()
-	game.session.close()
-	game.queue_free()
-	await process_frame
-	await create_timer(0.2).timeout
+	await game.quit_game(0 if failed == 0 else 1,false)

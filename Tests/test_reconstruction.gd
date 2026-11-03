@@ -28,7 +28,7 @@ func run() -> void:
 	game.new_game(123)
 	game.set_process(false);game.set_physics_process(false);game.player.set_physics_process(false)
 	await physics_frame;await physics_frame
-	check(game.world.descriptor()["seed"]==123 and game.world.half_extent()==160,"Main creates the seeded expanded world")
+	check(game.world.descriptor()["seed"]==123 and game.world.half_extent()==768,"Main creates the seeded expanded world")
 	check(game.world._chunks.size()<400,"Terrain streams a subset of the 400 chunks")
 	var tree=game.world.trees.filter(func(t):return t.tree_id==0)[0]
 	game.player.position=tree.position+Vector3(0,0.1,2)
@@ -95,7 +95,7 @@ func run() -> void:
 	check(Store.valid(original),"Expanded world and new player modules pass the version-four schema")
 	check(Store.save_world(original,game.save_folder)=="","The real expanded world writes successfully")
 	var restored: Dictionary = Store.load_world(game.save_folder)
-	check(restored.get("version")==4 and restored["world"]["seed"]==123 and restored["structures"].size()==6,"Reload preserves seed and every modular structure")
+	check(restored.get("version")==4 and restored["world"]["seed"]==123 and restored["structures"].size()==14,"Reload preserves seed and every modular structure")
 	check(restored["players"]["1"]["journal"]["markers"].size()==1,"Exploration markers persist in the player record")
 	var old: Dictionary = original.duplicate(true);old["version"]=3;old["seed"]=1337
 	old["players"]["1"]["position"]=[0,2,0]
@@ -179,7 +179,7 @@ func run() -> void:
 	game.player.set_physics_process(false)
 	var seeded_loot_position: Vector3 = game.world.sampler.locations[0]["position"] + Vector3(1,0,1)
 	check(game.world.get_structure(3000).position == seeded_loot_position and seeded_loot_position != previous_loot_position,"A new seed replaces same-ID loot geometry with the new seeded position")
-	check(game.world.structures.size()==2 and game.world.fires.is_empty() and game.world.shelters.is_empty(),"A new world clears previous player structures and fires")
+	check(game.world.structures.size()==10 and game.world.fires.is_empty() and game.world.shelters.is_empty(),"A new world clears previous player structures and fires")
 	check(game.world.resource_timers.is_empty() and game.world.cut_ids().is_empty(),"A new world cannot inherit resource regeneration or cut-tree state")
 	var replacement: Dictionary = game.snapshot()
 	var moved_at := Vector3(14,game.world.terrain_height(14,8),8)

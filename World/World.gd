@@ -56,6 +56,13 @@ var rain_focus: Vector3 = Vector3.ZERO
 var rain_enabled: bool = true
 var water_material: ShaderMaterial
 var reflection_probe: ReflectionProbe
+var far_forest: MultiMeshInstance3D
+var forest_material: ShaderMaterial
+var forest_ids: Dictionary = {}
+var forest_transforms: Array[Transform3D] = []
+var forest_cut_hash:int = -1
+var distant_terrain: MeshInstance3D
+var distant_material: ShaderMaterial
 var generated: bool = false
 var generation_cancelled: bool = false
 var last_daylight: float = 1.0
@@ -144,6 +151,7 @@ func _install_chunk(key: Vector2i, arrays: Array) -> void:
 	shape.backface_collision = true
 	Shapes.collider(ground, shape, Vector3.ZERO)
 	_spawn_chunk_trees(key)
+	if int(world_description["generator"])>=2 and DisplayServer.get_name()!="headless": _spawn_ground_life(root,key)
 
 func setup_environment() -> void:
 	var node := WorldEnvironment.new()
@@ -195,6 +203,7 @@ func make_scenery() -> void:
 		var rock := Shapes.sphere(self, rng.randf_range(0.3, 0.75), p, Color("#78827b"))
 		rock.scale = Vector3(1.3, 0.6, 1.0)
 		rock.rotation.y = rng.randf() * TAU
+		rock.add_to_group("world_rock")
 	var water := PlaneMesh.new()
 	water.size = Vector2(160, 160)
 	water.subdivide_width = 48
@@ -270,7 +279,7 @@ func illuminate(clock) -> void:
 	sky_material.sky_top_color = Color("#0b162e").lerp(Color("#4387a1"), day).lerp(Color("#414d5b"), cloud * 0.7)
 	sky_material.sky_horizon_color = Color("#26394d").lerp(Color("#d5d9b5"), day).lerp(Color("#68767b"), cloud * 0.7)
 	environment.fog_light_color = Color("#1e2f42").lerp(Color("#a3bab2"), day)
-	environment.fog_density = 0.003 + float(weather.get("fog", 0)) * 0.025 + float(weather.get("rain", 0)) * 0.008
+	environment.fog_density = 0.0018 + float(weather.get("fog", 0)) * 0.025 + float(weather.get("rain", 0)) * 0.008
 
 func apply_weather(state: Dictionary) -> void:
 	if cloud_mesh != null:
@@ -358,6 +367,15 @@ func nearest_tree(player: Node3D):
 	return result
 
 func placement(player: CharacterBody3D, kind: String = "campfire", rotation_value: int = 0) -> Dictionary:
+	if kind=="raft":
+		var at:Vector3=player.position-player.global_basis.z*4
+		at.y=water_level+0.12
+		var valid:bool=contains_position(at) and structures.size()<512
+		for offset in [Vector3(-1,0,-1.8),Vector3(1,0,1.8),Vector3.ZERO]:
+			valid=valid and terrain_height(at.x+offset.x,at.z+offset.z)<water_level-0.6
+		for piece in structures:
+			if piece.position.distance_to(at)<3:valid=false
+		return {"valid":valid,"position":at,"rotation":rotation_value}
 	if kind in Piece.KINDS: return _modular_placement(player, kind, rotation_value)
 	var shelter := kind == "shelter"
 	if (shelters.size() >= 16 if shelter else fires.size() >= 32):
@@ -429,6 +447,7 @@ func warmth_at(at: Vector3) -> bool:
 	return false
 
 func restore(data: Dictionary) -> void:
+	apply_terrain_changes(data.get("terrain_changes",{}))
 	_cut_registry.clear()
 	for id in data.get("cut", []): _cut_registry[int(id)] = true
 	resource_timers = data.get("resource_timers", {}).duplicate(true)
@@ -606,9 +625,14 @@ func configure_world(description: Dictionary) -> void:
 			fish.setup(id,Vector3(sampler.lake_center.x+sin(id*2.4)*6,water_level-0.5,sampler.lake_center.y+cos(id*2.4)*6))
 			fishes.append(fish)
 	_place_grass(Vector3.ZERO)
+	_make_distant_terrain()
+	_make_distant_forest()
 	for child in get_children():
+		if child.is_in_group("world_rock"):
+			child.position.y=terrain_height(child.position.x,child.position.z)+0.2
+			child.visible=child.position.y>water_level+0.1
 		if child is MeshInstance3D and child.mesh is PlaneMesh and child != cloud_mesh:
-			child.mesh.size = Vector2(480, 480)
+			child.mesh.size = Vector2.ONE * (half_extent() * 2.6)
 	update_streaming([Vector3.ZERO])
 
 func _remove_world_object(node: Node) -> void:
@@ -627,15 +651,15 @@ func _build_tree_catalog() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(world_description["seed"])
 	var legacy: bool = int(world_description["generator"]) == 0
-	var count := 160 if legacy else 800
-	var extent := 58.0 if legacy else 145.0
+	var count := 160 if legacy else (16000 if int(world_description["generator"]) >= 2 else 800)
+	var extent := 58.0 if legacy else (145.0 if int(world_description["generator"])==1 else half_extent()*0.91)
 	for id in range(count):
 		var at := Vector3(rng.randf_range(-extent, extent), 0, rng.randf_range(-extent, extent))
 		while Vector2(at.x, at.z).length() < 7: at = Vector3(rng.randf_range(-extent, extent), 0, rng.randf_range(-extent, extent))
 		if id < 3: at = [Vector3(3,0,-3),Vector3(-3,0,-3),Vector3(0,0,-6)][id]
 		at.y = terrain_height(at.x, at.z)
 		var size := rng.randf_range(0.85,1.35)
-		var tint := Color("#34724c").lerp(Color("#729755"), rng.randf())
+		var tint := Color("#38724c").lerp(Color("#7ea958"), rng.randf())
 		if not legacy and at.y < water_level + 0.6: continue
 		var biome := biome_at(at.x, at.z)
 		var species: String = "oak" if legacy else ("palm" if biome == "beach" else ("pine" if biome in ["mountains", "tundra"] else ("burnt" if biome == "volcanic" else ["oak","pine","birch","fruit","fallen"][id % 5])))
@@ -681,6 +705,10 @@ func _build_chunk_job(key: Vector2i, model, generation: int) -> void:
 	_mutex.lock(); _ready_arrays.append({"key":key,"arrays":arrays,"generation":generation}); _mutex.unlock()
 
 func _process(_delta: float) -> void:
+	_sync_distant_forest()
+	if forest_material!=null and not _focus_positions.is_empty():forest_material.set_shader_parameter("focus",Vector2(_focus_positions[0].x,_focus_positions[0].z))
+	for poi in _poi_nodes: poi.visible=has_terrain_at(poi.position)
+	if distant_material!=null and not _focus_positions.is_empty(): distant_material.set_shader_parameter("focus",Vector2(_focus_positions[0].x,_focus_positions[0].z))
 	if _job >= 0 and WorkerThreadPool.is_task_completed(_job):
 		WorkerThreadPool.wait_for_task_completion(_job); _job = -1
 	_mutex.lock()
@@ -789,7 +817,7 @@ func restore_buildings(records: Array) -> void:
 		var piece = get_structure(id)
 		var p: Array = record["position"]
 		var at := Vector3(p[0], p[1], p[2])
-		if piece != null and (piece.kind != record["kind"] or piece.position != at or piece.owner_key != record["owner"] or not is_equal_approx(piece.rotation.y, int(record["rotation"]) * PI * 0.5)):
+		if piece != null and (piece.kind != record["kind"] or (piece.kind!="raft" and piece.position != at) or piece.owner_key != record["owner"] or (piece.kind!="raft" and not is_equal_approx(piece.rotation.y, int(record["rotation"]) * PI * 0.5))):
 			# IDs are scoped to a saved world. Rebuild the physical piece when its
 			# identity fields change; retaining its old mesh/collider leaks state.
 			structures.erase(piece)
@@ -799,6 +827,9 @@ func restore_buildings(records: Array) -> void:
 		if piece == null:
 			piece = add_structure(record["kind"],at,record["rotation"],record["owner"],id)
 		if piece != null:
+			if piece.kind=="raft":
+				piece.replica_target=at;piece.replica_yaw=int(record["rotation"])*PI*0.5
+				if piece.is_multiplayer_authority():piece.position=at;piece.rotation.y=piece.replica_yaw
 			piece.hp = int(record["hp"]); piece.set_open(bool(record.get("open",false)))
 			piece.storage = record.get("storage",{}).duplicate(true); piece.bound_to = str(record.get("bound_to",""))
 	for piece in structures.duplicate():
@@ -823,3 +854,108 @@ func _make_points_of_interest() -> void:
 
 func fish_states() -> Array:
 	return fishes.map(func(fish): return fish.state())
+
+func apply_terrain_changes(edits: Dictionary) -> void:
+	if sampler.changes==edits:return
+	_generation+=1
+	sampler=Terrain.new(world_description,edits)
+	call_deferred("_refresh_edited_chunks")
+func _refresh_edited_chunks() -> void:
+	for key in _chunks.keys():
+		var node:Node=_chunks[key]
+		remove_child(node);node.queue_free()
+		_chunks.erase(key)
+		# Trees are independent from terrain chunk nodes; keep stable IDs.
+	for z in range(-1,2):
+		for x in range(-1,2):
+			var p:Vector3=_focus_positions[0] if not _focus_positions.is_empty() else Vector3.ZERO
+			var key:=Vector2i(floori(p.x/16)+x,floori(p.z/16)+z)
+			_install_chunk(key,sampler.chunk_arrays(key.x*16,key.y*16))
+func dig(at: Vector3) -> bool:
+	if not contains_position(at) or terrain_height(at.x,at.z)<water_level+0.5:return false
+	var edits:Dictionary=sampler.changes.duplicate(true)
+	var key:="%d,%d"%[roundi(at.x/4.0),roundi(at.z/4.0)]
+	if edits.size()>=1024 or float(edits.get(key,0))>=4:return false
+	edits[key]=float(edits.get(key,0))+0.5
+	apply_terrain_changes(edits)
+	return true
+
+func _make_distant_terrain() -> void:
+	if is_instance_valid(distant_terrain):distant_terrain.queue_free()
+	distant_material=null
+	if int(world_description["generator"])<2 or DisplayServer.get_name()=="headless":return
+	var surface:=SurfaceTool.new();surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var extent:=half_extent();var step:=extent*2/96
+	for z in range(96):
+		for x in range(96):
+			for corner in [Vector2i(0,0),Vector2i(1,0),Vector2i(0,1),Vector2i(1,0),Vector2i(1,1),Vector2i(0,1)]:
+				var at:=Vector2(-extent+(x+corner.x)*step,-extent+(z+corner.y)*step)
+				var normal:=Vector3(sampler.height(at.x-1,at.y)-sampler.height(at.x+1,at.y),2,sampler.height(at.x,at.y-1)-sampler.height(at.x,at.y+1)).normalized()
+				surface.set_normal(normal);surface.set_color(sampler.ground_color(at.x,at.y,normal))
+				surface.add_vertex(Vector3(at.x,sampler.height(at.x,at.y)-0.7,at.y))
+	distant_terrain=MeshInstance3D.new();distant_terrain.mesh=surface.commit()
+	distant_terrain.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	distant_material=ShaderMaterial.new();distant_material.shader=preload("res://Assets/Shaders/distant_terrain.gdshader")
+	distant_terrain.material_override=distant_material;add_child(distant_terrain)
+func _spawn_ground_life(parent: Node3D,key: Vector2i) -> void:
+	var rng:=RandomNumberGenerator.new();rng.seed=int(world_description["seed"])+key.x*1973+key.y*9277
+	var stem:=CylinderMesh.new();stem.top_radius=0.015;stem.bottom_radius=0.025;stem.height=0.32;stem.radial_segments=5
+	var flower:=SphereMesh.new();flower.radius=0.065;flower.height=0.055;flower.radial_segments=6;flower.rings=3
+	for layer in range(2):
+		var multi:=MultiMesh.new();multi.transform_format=MultiMesh.TRANSFORM_3D;multi.use_colors=true
+		multi.mesh=stem if layer==0 else flower;multi.instance_count=20
+		var batch:=MultiMeshInstance3D.new();batch.multimesh=multi
+		var mat:=StandardMaterial3D.new();mat.vertex_color_use_as_albedo=true;mat.roughness=0.95
+		batch.material_override=mat;batch.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		parent.add_child(batch)
+		rng.seed=int(world_description["seed"])+key.x*1973+key.y*9277
+		for i in range(20):
+			var at:=Vector3(key.x*16+rng.randf_range(0,16),0,key.y*16+rng.randf_range(0,16));at.y=terrain_height(at.x,at.z)
+			var basis:=Basis.IDENTITY
+			if at.y<water_level+0.7 or sampler.biome(at.x,at.z) in ["desert","volcanic","tundra"]:basis=basis.scaled(Vector3.ZERO)
+			at.y+=0.16 if layer==0 else 0.34
+			multi.set_instance_transform(i,Transform3D(basis,at))
+			multi.set_instance_color(i,Color("#5a8851") if layer==0 else [Color("#dfc36b"),Color("#aa95c7"),Color("#ead9bf")][i%3])
+
+func _make_distant_forest() -> void:
+	if is_instance_valid(far_forest):far_forest.queue_free()
+	forest_material=null
+	forest_ids.clear();forest_transforms.clear();forest_cut_hash=-1
+	if int(world_description["generator"])<2 or DisplayServer.get_name()=="headless":return
+	var holder:=Node3D.new()
+	Shapes.cylinder(holder,0.22,2.9,Vector3(0,1.45,0),Color("#66503a"))
+	Shapes.sculpted(holder,Vector3(0,3.3,0),Vector3(3.0,2.4,2.9),Color("#55774b"),"fur")
+	var surface:=SurfaceTool.new();surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for part in holder.get_children():
+		var arrays:Array=part.mesh.surface_get_arrays(0)
+		var vertices:PackedVector3Array=arrays[Mesh.ARRAY_VERTEX]
+		var indices:PackedInt32Array=arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX]!=null else PackedInt32Array()
+		var normals:PackedVector3Array=arrays[Mesh.ARRAY_NORMAL]
+		for i in range(indices.size() if not indices.is_empty() else vertices.size()):
+			var index:int=indices[i] if not indices.is_empty() else i
+			surface.set_normal((part.basis.inverse().transposed()*normals[index]).normalized())
+			surface.set_color(part.material_override.albedo_color)
+			surface.add_vertex(part.transform*vertices[index])
+	holder.free()
+	var records:Array=[]
+	for items in _chunk_records.values():
+		for record in items:
+			if int(record["id"])%6==0:records.append(record)
+	var multi:=MultiMesh.new();multi.transform_format=MultiMesh.TRANSFORM_3D;multi.mesh=surface.commit();multi.instance_count=records.size()
+	for i in range(records.size()):
+		var record:Dictionary=records[i]
+		var transform:=Transform3D(Basis.IDENTITY.scaled(Vector3.ONE*float(record["size"])),record["position"])
+		multi.set_instance_transform(i,transform);forest_ids[int(record["id"])]=i;forest_transforms.append(transform)
+	far_forest=MultiMeshInstance3D.new();far_forest.multimesh=multi
+	far_forest.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	forest_material=ShaderMaterial.new();forest_material.shader=preload("res://Assets/Shaders/distant_forest.gdshader")
+	far_forest.material_override=forest_material;add_child(far_forest)
+func _sync_distant_forest() -> void:
+	if not is_instance_valid(far_forest):return
+	var signature:int=hash(_cut_registry)
+	if signature==forest_cut_hash:return
+	forest_cut_hash=signature
+	for id in forest_ids:
+		var index:int=forest_ids[id];var at:Transform3D=forest_transforms[index]
+		if _cut_registry.has(id):at.basis=at.basis.scaled(Vector3.ZERO)
+		far_forest.multimesh.set_instance_transform(index,at)

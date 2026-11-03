@@ -1,6 +1,6 @@
 # Tribes of Fire
 
-Criado por **felipealx** · código em desenvolvimento **0.4.0-dev** · Godot 4.6.3 · Windows/Linux x64
+Criado por **felipealx** · código em desenvolvimento **0.5.0-dev** · Godot 4.6.3 · Windows/Linux x64
 
 Jogo de sobrevivência 3D em terceira pessoa, com modo solo, hospedagem por jogador
 e servidor dedicado autoritativo. A reconstrução continua a base existente; não é
@@ -9,31 +9,20 @@ pendentes estão em [PROGRESS.md](PROGRESS.md) e [Docs/PENDENCIAS.md](Docs/PENDE
 
 ## Versões e downloads
 
-**[0.4.0-dev — versão de desenvolvimento](https://github.com/teyranto7-cloud/Tribes-Of-Fire/releases/tag/v0.4.0-dev).** Os executáveis não precisam do editor
-Godot instalado. Instale o pacote Windows ou extraia o ZIP do seu sistema:
+**0.5.0-dev — sobrevivência em desenvolvimento.** Instalador Windows, ZIPs de jogo
+Windows/Linux, servidor Linux e fontes são gerados a partir dos testes e recibo
+congelado. O editor não é necessário para executar o jogo exportado.
 
-- [Instalador Windows x64](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.4.0-dev/TribesOfFire-0.4.0-dev-Windows-Setup.exe)
-- [Windows ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.4.0-dev/TribesOfFire-0.4.0-dev-Windows.zip)
-- [Linux ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.4.0-dev/TribesOfFire-0.4.0-dev-Linux.zip)
-- [Servidor dedicado Linux ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.4.0-dev/TribesOfFire-0.4.0-dev-Server-Linux.zip)
-- [Código-fonte ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.4.0-dev/TribesOfFire-0.4.0-dev-Source.zip)
-- [SHA256](Downloads/0.4.0-dev/SHA256SUMS.txt) e [manifesto](Downloads/0.4.0-dev/manifest.json)
+- [Instalador Windows](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.5.0-dev/TribesOfFire-0.5.0-dev-Windows-Setup.exe)
+- [ZIP Windows](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.5.0-dev/TribesOfFire-0.5.0-dev-Windows.zip)
+- [ZIP Linux](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.5.0-dev/TribesOfFire-0.5.0-dev-Linux.zip)
+- [Servidor Linux](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.5.0-dev/TribesOfFire-0.5.0-dev-Server-Linux.zip)
+- [Código-fonte ZIP](https://github.com/teyranto7-cloud/Tribes-Of-Fire/raw/refs/heads/main/Downloads/0.5.0-dev/TribesOfFire-0.5.0-dev-Source.zip)
+- [SHA256 dos pacotes](Downloads/0.5.0-dev/SHA256SUMS.txt)
 
-Windows: execute o instalador ou extraia o ZIP e abra `TribesOfFire.exe`.
-Linux: extraia o ZIP, execute `chmod +x TribesOfFire.x86_64` e
-`./TribesOfFire.x86_64`. Faça backup dos dados em `user://` antes de atualizar;
-preserve `identity.cfg` para recuperar seu personagem no servidor.
-
-A suíte completa passou em **458 verificações**; os testes dos executáveis Linux
-passaram em mais 6. Também passaram 50 reinícios, integração com dois clientes e
-comunicação com três clientes usando áudio sintético. Instalação/runtime headless nativos
-Windows passaram no [workflow Windows](https://github.com/teyranto7-cloud/Tribes-Of-Fire/actions/runs/41493048214);
-renderização em Windows 10/11, microfone físico, hardware alvo e carga permanecem
-pendentes. Isso não certifica jogo completo, 60 FPS ou 100 jogadores.
-
-Pacotes anteriores e suas evidências permanecem em `Downloads/0.3.1-dev` e
-`Docs/verification/0.3.1-dev`. A documentação dentro dos pacotes registra o estado
-na sua geração; consulte este README e o relatório atual para resultados posteriores.
+Guia de coleta, fabricação, medicina, máquinas, jangada, escavação e tribos:
+[Como jogar](Docs/PLAYABILITY.md). Resultados atuais em [PROGRESS.md](PROGRESS.md).
+Os downloads 0.4 anteriores permanecem preservados; não representam a nova revisão.
 
 ## Executar o código-fonte
 
@@ -47,11 +36,11 @@ godot --path .
 ```
 
 O checkout contém código, assets, testes e instruções de build. A pasta
-`Downloads/0.4.0-dev` contém os pacotes preparados desta revisão.
+`Downloads/0.5.0-dev` contém os pacotes preparados desta revisão.
 
 Escolha o idioma, uma nova jornada, a seed e o personagem. Mundos novos usam um
-terreno de **320 × 320 m** com geração determinística; saves anteriores preservam
-seu gerador de 128 × 128 m. Não é o continente final de 12 km solicitado.
+terreno de **1536 × 1536 m** com geração determinística; saves anteriores preservam
+seu gerador de 128 × 128 m ou 320 × 320 m. Não é o continente final de 12 km solicitado.
 
 Controles podem ser remapeados em Configurações; Ajuda mostra os comandos.
 
@@ -74,6 +63,13 @@ Tecnologia e fabricação contém pesquisa, reabastecimento de fogueira, pesca c
 lança e cultivo de bagas próximo a um canteiro. Esses sistemas são versões mínimas
 funcionais, não a progressão completa proposta no relatório de conteúdo.
 
+## Novidades 0.5
+
+Faces invertidas corrigidas, abas/busca/fila de craft, fontes de recursos e
+medicamentos, mapa de 1536 m com rio e 96 animais, jangada conduzível, pá/escavação,
+serraria/tear/britador e diplomacia/guerra. Dia/noite permanecem ativos.
+São versões funcionais iniciais; consulte o guia e as limitações antes de jogar.
+
 ## Sistemas atuais
 
 - Terreno por seed, carregamento de chunks, árvores com IDs estáveis e rebrota,
@@ -95,13 +91,12 @@ funcionais, não a progressão completa proposta no relatório de conteúdo.
 - Tribos, convites/liderança e proteção bilateral de 300 s após saída/expulsão;
   chat e voz opt-in herdados da versão anterior.
 
-O novo teste integrado cobre 83 verificações na cena real; a suíte completa soma
-458 verificações sem falhas. Passaram também 50 aberturas headless, rede com dois
-clientes, reconexão, migração para dedicado e comunicação com três clientes.
-Inspeção gráfica confirmou a apresentação atual, ainda geométrica e com traduções
-novas pendentes. Esses resultados não substituem carga, sessão de 30 min,
-dispositivos físicos ou execução em Windows.
-Consulte [o relatório desta reconstrução](Docs/RECONSTRUCTION_TEST_REPORT.md).
+A suíte completa da 0.5 passou **564 verificações, sem falhas**. Os executáveis
+Linux passaram seis verificações de abertura/persistência/reinício. Servidor ENet
+com dois clientes passou movimento e coleta compartilhada. A inspeção gráfica
+usou Mesa llvmpipe, sem certificar GPU física ou arte final. Consulte
+[o relatório atual](Docs/PLAYABILITY_REPORT.md) para evidências e limites;
+[a auditoria anterior](Docs/RECONSTRUCTION_TEST_REPORT.md) documenta a 0.4.
 
 ## Multiplayer, servidor e comunicação
 
@@ -197,12 +192,12 @@ Os testes de presets aguardam 120 s reais por perfil e reiniciam os processos.
 A verificação adicional de 50 aberturas usa `python3 Tools/test_startup_stability.py`.
 Builds ficam em `builds/`, pacotes em `dist/`; o empacotador exige recibo de fontes
 e binários, verifica ZIPs e gera hashes. Produz instalador NSIS por usuário e ZIPs
-Windows, Linux, servidor e fontes. As três exportações 0.4.0-dev foram geradas e
+Windows, Linux, servidor e fontes. As três exportações 0.5.0-dev foram geradas e
 os executáveis Linux foram testados. A geração de ZIPs/NSIS não equivale à aprovação
-de instalação nativa. O QA Windows e o workflow foram adaptados estaticamente para
-a nova versão/schema/coordenadas. Instalação, atalhos, execução headless, reinício,
-reinstalação e desinstalação dos novos artefatos passaram no Windows nativo;
-renderização interativa e dispositivos físicos continuam pendentes.
+de instalação nativa. O workflow Windows valida a versão presente em Downloads;
+o resultado desta revisão será registrado em Docs/PLAYABILITY_REPORT.md após
+execução. A aprovação anterior 0.4 não é transferida para o novo instalador.
+Renderização interativa Windows e dispositivos físicos continuam pendentes.
 
 Arquitetura em [ARCHITECTURE.md](ARCHITECTURE.md), diagnóstico anterior às mudanças
 em [Docs/RECONSTRUCTION_DIAGNOSIS.md](Docs/RECONSTRUCTION_DIAGNOSIS.md), histórico

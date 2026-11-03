@@ -41,6 +41,7 @@ var pvp_damage: int = 0
 var wildlife
 var _initial_animals: Array = []
 var audio
+var factory_view: Dictionary = {}
 signal message_added(data: Dictionary)
 func configure(value) -> void:
 	game = value
@@ -115,7 +116,7 @@ func player_record(id: int) -> Dictionary:
 func save_state() -> Dictionary:
 	var records: Array = []
 	for station in workshops:
-		records.append({"kind": station.kind, "position": [station.position.x, station.position.y, station.position.z], "owner": station.owner_key})
+		records.append({"kind": station.kind, "position": [station.position.x, station.position.y, station.position.z], "owner": station.owner_key, "machine": station.machine.duplicate(true)})
 	var dropped: Array = []
 	for drop in drops:
 		dropped.append({"id": drop.get_meta("id"), "count": drop.get_meta("count"), "durability": drop.get_meta("durability", 100), "position": [drop.position.x, drop.position.y, drop.position.z]})
@@ -128,7 +129,7 @@ func restore(data: Dictionary) -> void:
 	channels.restore(data.get("communication", {}))
 	var resource_state: Array = data.get("mining", [])
 	if resource_state.is_empty():
-		resource_state.resize(22)
+		resource_state.resize(mining.nodes.size())
 		resource_state.fill(8)
 	mining.restore(resource_state)
 	mining.restore_regrowth(data.get("resource_regrowth", []))
@@ -138,12 +139,18 @@ func restore(data: Dictionary) -> void:
 	_restore_drops(data.get("drops", []))
 	wildlife.restore(data.get("animals", _fresh_animals()), true)
 func _restore_workshops(records: Array) -> void:
-	for station in workshops:
-		station.queue_free()
-	workshops.clear()
-	for record in records:
-		var p: Array = record["position"]
-		_add_workshop(record["kind"], Vector3(p[0], p[1], p[2]), record["owner"])
+	while workshops.size()>records.size():workshops.pop_back().queue_free()
+	for i in range(records.size()):
+		var record:Dictionary=records[i];var p:Array=record["position"]
+		var at:=Vector3(p[0],p[1],p[2])
+		if i<workshops.size():
+			var old=workshops[i]
+			if old.kind!=record["kind"] or old.owner_key!=record["owner"] or old.position!=at:
+				old.queue_free();var fresh:=Workshop.new();game.world.add_child(fresh)
+				fresh.setup(record["kind"],at,record["owner"]);workshops[i]=fresh
+		else:_add_workshop(record["kind"],at,record["owner"])
+		workshops[i].machine=record.get("machine",preload("res://Building/Factory.gd").empty()).duplicate(true)
+
 func _add_workshop(kind: String, at: Vector3, owner: String) -> void:
 	var station := Workshop.new()
 	game.world.add_child(station)
@@ -215,6 +222,8 @@ func tick(delta: float) -> void:
 		_tick_activities(activity_delta)
 		mining.tick_regrowth()
 		_tick_farming(activity_delta)
+		for station in workshops:
+			preload("res://Building/Factory.gd").advance(station.machine,station.kind,activity_delta)
 		combat.tick(delta)
 		for id in needs:
 			if game.players.has(id) and not game.players[id].creation_pending:
@@ -261,6 +270,8 @@ func command(id: int, action: String, data: Dictionary) -> void:
 		if accepted and not Store.payload_fits(game.snapshot()):
 			tribes.restore(before)
 			accepted = false
+		if accepted and action in ["tribe_war","tribe_break_alliance","tribe_accept_peace","tribe_accept_alliance"]:
+			for recipient in game.players:game.session.notify(recipient,"notice",{"key":tribes.tribes.get(tribes.tribe_of(identity),{}).get("name","")+" · "+action.trim_prefix("tribe_")})
 		publish_channels()
 	elif action.begins_with("group_") or action.begins_with("call_") or action == "block":
 		var before := channels.state()
@@ -304,7 +315,7 @@ func command(id: int, action: String, data: Dictionary) -> void:
 								wildlife.hit(target_body, int(result["damage"]), id)
 							else:
 								var target_id: int = game.players.find_key(target_body)
-								if game.server_rules["pvp"] == "on" and tribes.can_damage(identity, key(target_id)):
+								if (game.server_rules["pvp"] == "on" or (game.server_rules["pvp"]=="war" and tribes.at_war(tribes.tribe_of(identity),tribes.tribe_of(key(target_id))))) and tribes.can_damage(identity, key(target_id)):
 									var dealt: int = Combat.mitigate(int(result["damage"]), game.inventories[target_id], target_body.blocking, target_body.dodging > 0)
 									target_body.vitals.damage(dealt)
 									pvp_damage += dealt
@@ -312,7 +323,12 @@ func command(id: int, action: String, data: Dictionary) -> void:
 									pvp_blocked += 1
 						accepted = true
 			"eat":
-				accepted = needs[id].eat(inv, str(data.get("item", "berries")))
+				var item:=str(data.get("item","berries"))
+				if item in ["bandage","herbal_tea","medical_kit"]:
+					if body.vitals.hp<100 and inv.consume(item,1):
+						body.vitals.hp=mini(100,body.vitals.hp+(20 if item=="bandage" else (50 if item=="medical_kit" else 10)));accepted=true
+						if item=="herbal_tea": needs[id].drink(25)
+				else: accepted = needs[id].eat(inv,item)
 				if accepted: body.play_action("eat",0.9)
 			"cook": accepted = _enqueue_craft(id, "cooked_meat")
 			"drink":
@@ -346,6 +362,8 @@ func command(id: int, action: String, data: Dictionary) -> void:
 						at.y = game.world.terrain_height(at.x, at.z) + 0.1
 						_add_drop(taken["id"], taken["count"], at, int(taken.get("durability", 100)))
 						accepted = true
+			"factory_load", "factory_take": accepted = _factory_command(id,action,int(data["station"]))
+			"dig": accepted = _start_dig(id)
 			"mine": accepted = _start_mining(id, false)
 			"build":
 				var kind := str(data.get("piece", ""))
@@ -353,7 +371,7 @@ func command(id: int, action: String, data: Dictionary) -> void:
 				if not cost.is_empty():
 					var site: Dictionary = game.world.placement(body, kind, int(data.get("rotation", 0)))
 					if site["valid"] and _territory_allows(identity, site["position"]) and inv.transact(cost, {}):
-						if kind in ["workbench", "furnace"]: _add_workshop(kind, site["position"], identity)
+						if kind in ["workbench", "furnace", "sawmill", "loom", "crusher"]: _add_workshop(kind, site["position"], identity)
 						else: game.world.add_structure(kind, site["position"], int(data.get("rotation",0)), identity)
 						body.play_action("build", 0.75)
 						progression[id].award("building", Balance.number("progression", "build_xp", 8))
@@ -373,6 +391,8 @@ func publish_channels() -> void:
 	for id in game.players:
 		game.session.notify(id, "channels", channels.public_state(key(id)))
 func _event(kind: String, data: Dictionary) -> void:
+	if kind=="factory":
+		factory_view=data.duplicate(true);game.hud.show_panel("factory");return
 	if kind == "chat":
 		messages.append(data)
 		message_counter += 1
@@ -436,7 +456,7 @@ func _tick_activities(delta: float) -> void:
 		var required: String = definition.get("station","hand")
 		if required != "hand" and not required in stations(game.players[id]): continue
 		job["remaining"] = maxf(0,float(job["remaining"])-delta)
-		if job["remaining"]<=0 and game.inventories[id].add(job["recipe"],1):
+		if job["remaining"]<=0 and game.inventories[id].add(job["recipe"],int(definition.get("yield",1))):
 			entries.pop_front()
 			progression[id].award("cooking" if job["recipe"] in ["cooked_meat","cooked_fish"] else "crafting",Balance.number("progression","cook_xp" if job["recipe"] in ["cooked_meat","cooked_fish"] else "craft_xp",5))
 			game.journal.record_event(key(id),"craft")
@@ -452,6 +472,10 @@ func _tick_activities(delta: float) -> void:
 		var inv = game.inventories[id]
 		var meta: Dictionary = job["metadata"]
 		match job["kind"]:
+			"dig":
+				var target:Vector3=meta["position"]
+				if inv.equipped_item()=="shovel" and body.position.distance_to(target)<4 and inv.can_add("soil",1) and game.world.dig(target):
+					inv.add("soil",1);inv.wear_equipment("hand",1);body.stamina=maxf(0,body.stamina-8)
 			"tree":
 				var tree = game.world.nearest_tree(body)
 				if tree == null or tree.tree_id != meta["tree"] or inv.equipped_item()!="axe" or drops.size()>=128: continue
@@ -470,7 +494,7 @@ func _tick_activities(delta: float) -> void:
 			"mine":
 				var index: int = int(meta["resource"])
 				if drops.size()<128 and mining.mine(body,inv,index,bool(meta["hand"]),true):
-					_add_drop(mining.KINDS[index % mining.KINDS.size()],1,mining.nodes[index].position+Vector3.UP*0.4)
+					_add_drop(mining.resource_kind(index),1,mining.nodes[index].position+Vector3.UP*0.4)
 					progression[id].award("gathering",Balance.number("progression","gather_xp",4))
 			"corpse":
 				var animal = wildlife.animals[int(meta["animal"])]
@@ -491,9 +515,10 @@ func _tick_activities(delta: float) -> void:
 func _enqueue_craft(id: int, recipe: String) -> bool:
 	var definition: Dictionary = preload("res://Items/Catalog.gd").recipe(recipe)
 	if definition.is_empty(): return false
-	var station: String = definition.get("station","hand")
-	if station!="hand" and not station in stations(game.players[id]): return false
-	if int(definition.get("era",0)) > Profile.era(known_technologies(id)): return false
+	var reason:=craft_reason(id,recipe)
+	if not reason.is_empty():
+		game.session.notify(id,"notice",{"key":reason})
+		return false
 	if not activities.enqueue(id,recipe,game.inventories[id]): return false
 	game.players[id].play_action("craft",float(definition.get("time",2.5)))
 	return true
@@ -561,6 +586,12 @@ func _refuel(id: int) -> bool:
 	return false
 func _interact(id: int) -> bool:
 	var body = game.players[id]
+	if is_instance_valid(body.boat):
+		body.position=body.boat.position+body.boat.global_basis.x*2+Vector3.UP*0.7
+		body.boat=null;return true
+	var vessel=game.world.structure_near(body,"raft",3.5)
+	if _accessible(id,vessel) and not game.players.values().any(func(other):return other.boat==vessel):
+		body.boat=vessel;body.position=vessel.position+Vector3.UP*0.25;body.velocity=Vector3.ZERO;return true
 	var piece = game.world.structure_near(body)
 	if _accessible(id,piece):
 		if piece.kind=="door": return game.world.toggle_door(piece.structure_id)
@@ -576,16 +607,23 @@ func _interact(id: int) -> bool:
 	for drop in drops:
 		if body.position.distance_to(drop.position)<2.5 and _clear_interaction(body,drop.position+Vector3.UP*0.2):
 			if activities.start_action(id,"pickup",0.55,{"drop":drop.get_instance_id()}): body.play_action("gather",0.55);return true
-	if _start_mining(id,true): return true
+	for index in range(workshops.size()):
+		var station=workshops[index]
+		if preload("res://Building/Factory.gd").RECIPES.has(station.kind) and body.position.distance_to(station.position)<3 and tribes.can_build(station.owner_key,key(id)) and _clear_interaction(body,station.position+Vector3.UP,[station.get_rid()]):
+			game.session.notify(id,"factory",{"station":index,"kind":station.kind,"state":station.machine.duplicate(true)})
+			return true
+	if _start_mining(id,game.inventories[id].equipped_item() not in ["pickaxe","iron_pickaxe"]): return true
 	for source in get_tree().get_nodes_in_group("potable_source"):
-		if source.position.distance_to(body.position)<3 and _clear_interaction(body,source.position+Vector3.UP*0.2): return needs[id].drink()
+		if source.position.distance_to(body.position)<3 and _clear_interaction(body,source.position+Vector3.UP*0.2):
+			if needs[id].drink(): return true
+			return game.inventories[id].add("water",1)
 	return false
 func _start_mining(id: int, hand: bool) -> bool:
 	var body = game.players[id]
-	var index: int = mining.closest(body,3,not hand)
+	var index: int = mining.closest(body,3,not hand,hand)
 	if index<0 or activities.actions.has(id): return false
-	var kind: String = mining.KINDS[index % mining.KINDS.size()]
-	if hand and kind not in ["stone","wood","fiber","berries"]: return false
+	var kind: String = mining.resource_kind(index)
+	if hand and kind not in ["stone","wood","fiber","berries","herb","petals","clay","sand","soil"]: return false
 	if not hand and game.inventories[id].equipped_item() not in ["pickaxe","iron_pickaxe"]: return false
 	if not activities.start_action(id,"mine",0.7,{"resource":index,"hand":hand}): return false
 	body.play_action("mine",0.7);return true
@@ -632,15 +670,61 @@ func _update_crop_visuals() -> void:
 
 func _fresh_animals() -> Array:
 	var records: Array = _initial_animals.duplicate(true)
+	if int(game.world.descriptor()["generator"])>=2:
+		for i in range(12,96):
+			var row:Dictionary=_initial_animals[i%12].duplicate(true)
+			row["id"]=i;records.append(row)
 	if int(game.world.descriptor()["generator"])==0: return records
 	var rng:=RandomNumberGenerator.new();rng.seed=int(game.world.descriptor()["seed"])+707
 	for row in records:
 		var at:=Vector3.ZERO
 		for attempt in range(100):
 			var angle: float = rng.randf()*TAU
-			var radius: float = 24+int(row["id"])*3
+			var radius: float = 24+int(row["id"])*3 if int(row["id"])<12 else rng.randf_range(160,640)
 			at=Vector3(sin(angle)*radius,0,cos(angle)*radius)
 			at.y=game.world.terrain_height(at.x,at.z)+0.05
 			if at.y>game.world.water_level+0.4: break
 		row["position"]=[at.x,at.y,at.z];row["home"]=row["position"].duplicate()
 	return records
+
+func craft_reason(id: int, recipe: String) -> String:
+	var definition:Dictionary=preload("res://Items/Catalog.gd").recipe(recipe)
+	if definition.is_empty() or not game.players.has(id): return "Unknown recipe"
+	if activities.queue(id).size()>=5: return "Crafting queue is full"
+	if int(definition.get("era",0))>Profile.era(known_technologies(id)): return "Research required in Technology"
+	var station:String=definition.get("station","hand")
+	if station!="hand" and not station in stations(game.players[id]): return "Stay near the required station: "+station
+	for item in definition["cost"]:
+		if game.inventories[id].count(item)<int(definition["cost"][item]): return "Missing materials: "+preload("res://Items/Catalog.gd").display_name(item)
+	return ""
+
+func _start_dig(id: int) -> bool:
+	var body=game.players[id]
+	if game.inventories[id].equipped_item()!="shovel" or activities.actions.has(id) or body.stamina<8:return false
+	var at:Vector3=body.position-body.global_basis.z*2
+	at.y=game.world.terrain_height(at.x,at.z)
+	if not _clear_interaction(body,at+Vector3.UP*0.15) or not game.world.contains_position(at):return false
+	if not activities.start_action(id,"dig",0.9,{"position":at}):return false
+	body.play_action("mine",0.9);return true
+
+func _factory_command(id: int,action: String,index: int) -> bool:
+	if index<0 or index>=workshops.size():return false
+	var station=workshops[index];var body=game.players[id];var inv=game.inventories[id]
+	if not preload("res://Building/Factory.gd").RECIPES.has(station.kind) or body.position.distance_to(station.position)>4 or not tribes.can_build(station.owner_key,key(id)) or not _clear_interaction(body,station.position+Vector3.UP,[station.get_rid()]):return false
+	var recipe:Dictionary=preload("res://Building/Factory.gd").RECIPES[station.kind]
+	if action=="factory_load":
+		for item in recipe["input"]:
+			if int(station.machine["input"].get(item,0))+int(recipe["input"][item])*5>9999:return false
+		var cost:Dictionary={}
+		for item in recipe["input"]:cost[item]=int(recipe["input"][item])*5
+		if not inv.transact(cost,{}):return false
+		for item in cost:station.machine["input"][item]=int(station.machine["input"].get(item,0))+cost[item]
+	else:
+		var output:Dictionary=station.machine["output"]
+		var reward:Dictionary={}
+		for item in output:
+			if int(output[item])>0:reward[item]=int(output[item])
+		if reward.is_empty() or not inv.add_many(reward):return false
+		station.machine["output"].clear()
+	game.session.notify(id,"factory",{"station":index,"kind":station.kind,"state":station.machine.duplicate(true)})
+	return true

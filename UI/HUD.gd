@@ -104,7 +104,7 @@ func _ready() -> void:
 	style.bg_color = Color(0.065, 0.125, 0.115, 0.98)
 	style.border_color = Color("#a08052")
 	style.set_border_width_all(2)
-	style.set_corner_radius_all(12)
+	style.set_corner_radius_all(18)
 	style.content_margin_left = 25
 	style.content_margin_right = 25
 	style.content_margin_top = 20
@@ -234,6 +234,8 @@ func show_panel(value: String) -> void:
 		"help": _help()
 		"technology": _technology()
 		"storage": _storage()
+		"factory": _factory()
+		"clans": _clans()
 		"map":
 			_heading(tr("World map"))
 			_add_panel(preload("res://UI/WorldMap.gd"))
@@ -255,6 +257,9 @@ func show_panel(value: String) -> void:
 
 
 func _main_menu() -> void:
+	var emblem:=TextureRect.new();emblem.texture=preload("res://Assets/icon.svg")
+	emblem.custom_minimum_size=Vector2(64,64);emblem.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
+	emblem.stretch_mode=TextureRect.STRETCH_KEEP_ASPECT_CENTERED;column.add_child(emblem)
 	_heading(t("Sobrevivência • exploração • construção", "Survival • exploration • building"))
 	button(t("Continuar jornada salva", "Continue saved journey"), Callable(game, "load_game")).disabled = game.saved.is_empty()
 	button(t("Nova jornada local", "New local journey"), func(): show_panel("create_world"))
@@ -270,6 +275,7 @@ func _main_menu() -> void:
 
 func _pause() -> void:
 	_heading(t("ACAMPAMENTO", "CAMP"))
+	button(t("Tribos e diplomacia","Tribes and diplomacy"),func():show_panel("clans"))
 	button(t("Retomar jornada", "Resume journey"), func(): show_panel(""))
 	var save_button := button(t("Salvar [F5]", "Save [F5]"), Callable(game, "save_game"))
 	var load_button := button(t("Carregar [F9]", "Load [F9]"), Callable(game, "load_game"))
@@ -369,9 +375,13 @@ func _process(delta: float) -> void:
 			exposure_label.text = ""
 	hint.visible = mode == ""
 	hint.text = equipped
+	if is_instance_valid(game.player.boat):hint.text=t("W/S remar · A/D virar · E desembarcar","W/S row · A/D turn · E disembark")
+	elif game.runtime.mining!=null:
+		var resource:int=game.runtime.mining.closest(game.player,3.0)
+		if resource>=0:hint.text="[E] "+preload("res://Items/Catalog.gd").display_name(game.runtime.mining.resource_kind(resource))
 	var activity: Dictionary = game.runtime.activities.action_state(game.session.local_id)
 	if float(activity.get("total",0))>0:
-		hint.text = tr("Gathering") + " · %d%%" % int((1-float(activity["remaining"])/float(activity["total"]))*100)
+		hint.text = tr("Gathering") + " · %d%%" % roundi((1.0-float(activity["remaining"])/float(activity["total"]))*100.0)
 	var bearing := posmod(roundi(rad_to_deg(game.player.yaw)),360)
 	var directions := ["N","NW","W","SW","S","SE","E","NE"]
 	hint.text += "   ·   " + directions[posmod(roundi(bearing/45.0),8)]
@@ -431,7 +441,7 @@ func _create_world() -> void:
 	var seed_input := LineEdit.new()
 	seed_input.max_length = 10
 	column.add_child(seed_input)
-	text(tr("New continent: 320 × 320 m. Existing worlds keep their terrain."), 14, MUTED)
+	text(tr("New continent: 1536 × 1536 m. Existing worlds keep their terrain."), 14, MUTED)
 	button(tr("Create world"), func():
 		var seed_value := -1
 		if not seed_input.text.strip_edges().is_empty():
@@ -516,4 +526,46 @@ func _admin() -> void:
 	button(tr("Save"),func():game.session.send_admin_action("save",{}))
 	var pvp:=CheckBox.new();pvp.text=tr("PvP enabled");pvp.button_pressed=game.server_rules["pvp"]=="on"
 	pvp.toggled.connect(func(v):game.session.send_admin_action("set_rule",{"rule":"pvp","value":"on" if v else "off"}));column.add_child(pvp)
+	button(tr("Back"),func():show_panel("pause"))
+
+func _factory() -> void:
+	var info:Dictionary=game.runtime.factory_view
+	if info.is_empty():return
+	_heading(t("Oficina de produção","Production workshop"))
+	text(preload("res://Items/Catalog.gd").display_name(info["kind"]),24)
+	var recipe:Dictionary=preload("res://Building/Factory.gd").RECIPES[info["kind"]]
+	for item in recipe["input"]:text(t("Entrada: ","Input: ")+preload("res://Items/Catalog.gd").display_name(item)+" ×%d"%recipe["input"][item])
+	for item in recipe["output"]:text(t("Saída: ","Output: ")+preload("res://Items/Catalog.gd").display_name(item)+" ×%d"%recipe["output"][item])
+	text(t("Tempo por ciclo: ","Time per cycle: ")+str(recipe["seconds"])+"s")
+	text(t("Reservas: ","Storage: ")+str(info["state"]["input"])+" → "+str(info["state"]["output"]))
+	button(t("Abastecer para 5 ciclos","Supply 5 cycles"),func():game.request_command("factory_load",{"station":int(info["station"])}) )
+	button(t("Retirar produção","Collect production"),func():game.request_command("factory_take",{"station":int(info["station"])}) )
+	button(t("Atualizar","Refresh"),func():game.request_command("interact",{}))
+	button(tr("Back"),func():show_panel(""))
+
+func _clans() -> void:
+	_heading(t("Tribos e diplomacia","Tribes and diplomacy"))
+	var tribes=game.runtime.tribes
+	var me:String=game.session.player_key(game.session.local_id)
+	var own:String=tribes.tribe_of(me)
+	button(t("Criar tribo / gerenciar membros","Create tribe / manage members"),func():show_panel("communication"))
+	if own.is_empty():
+		text(t("Crie ou entre em uma tribo para participar da diplomacia.","Create or join a tribe to participate in diplomacy."))
+	else:
+		text(str(tribes.tribes[own]["name"]),25)
+		text(t("Modo PvP: ","PvP mode: ")+str(game.server_rules["pvp"]))
+		for target in tribes.tribes:
+			if target==own:continue
+			var row:Dictionary=tribes.relations.get(tribes.pair_key(own,target),{})
+			text(str(tribes.tribes[target]["name"])+" · "+tr(str(row.get("status","neutral")).capitalize()),21)
+			var remaining:float=maxf(0,float(row.get("until",0))-Time.get_unix_time_from_system())
+			if remaining>0:text(t("Proteção: ","Protection: ")+"%d min"%ceili(remaining/60))
+			if tribes.tribes[own]["leader"]!=me:continue
+			for entry in [["tribe_war",t("Declarar guerra","Declare war")],["tribe_alliance",t("Propor aliança","Propose alliance")],["tribe_accept_alliance",t("Aceitar aliança","Accept alliance")],["tribe_peace",t("Propor paz","Propose peace")],["tribe_accept_peace",t("Aceitar paz","Accept peace")],["tribe_break_alliance",t("Romper aliança (1h de proteção)","End alliance (1h protection)")]]:
+				var action:String=entry[0];var destination:String=target
+				var b:=button(entry[1],func():game.request_command(action,{"target":destination}))
+				if "accept" in action:b.disabled=row.get("requested_by","")!=target or row.get("request","")!=("alliance" if "alliance" in action else "peace")
+				elif action=="tribe_break_alliance":b.disabled=row.get("status","")!="allied"
+				elif action=="tribe_war":b.disabled=remaining>0 or row.get("status","")=="allied"
+	button(tr("Refresh"),func():show_panel("clans"))
 	button(tr("Back"),func():show_panel("pause"))

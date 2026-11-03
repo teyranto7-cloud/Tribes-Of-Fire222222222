@@ -42,6 +42,7 @@ var body_shape: CollisionShape3D
 var _dodge_direction := Vector3.ZERO
 var visual_equipment: Dictionary = {"hand": "axe", "offhand": "", "armor": ""}
 
+var boat: Node3D
 var rig: Node3D
 var arm: SpringArm3D
 var camera: Camera3D
@@ -267,6 +268,8 @@ func _physics_process(delta: float) -> void:
 			rotation.y = yaw if local_control else lerp_angle(rotation.y, _remote_yaw, 1.0 - exp(-14.0 * delta))
 		_animate(delta, Vector2(_remote_velocity.x, _remote_velocity.z).length(), _remote_grounded)
 		return
+	if is_instance_valid(boat) and vitals.hp>0:
+		_sail(delta);return
 	if world != null and world.has_method("has_terrain_at") and not world.has_terrain_at(position) and world.terrain_height(position.x,position.z) > world.water_level:
 		velocity=Vector3.ZERO
 		return
@@ -361,14 +364,15 @@ func _animate(delta: float, speed: float, grounded: bool) -> void:
 	_stride += delta * speed * 2.3
 	var target_swing: float = sin(_stride) * minf(movement, 1.1) * 0.65 if grounded else 0.15
 	_swing = lerpf(_swing, target_swing, 1.0 - exp(-18.0 * delta))
-	left_leg.rotation.x = _swing if grounded else -0.35
-	right_leg.rotation.x = -_swing if grounded else 0.35
+	var blend:float=1.0-exp(-14.0*delta)
+	left_leg.rotation.x = lerp_angle(left_leg.rotation.x,_swing if grounded else -0.35,blend)
+	right_leg.rotation.x = lerp_angle(right_leg.rotation.x,-_swing if grounded else 0.35,blend)
 	left_knee.rotation.x = maxf(0, -_swing) * 0.65 if grounded else 0.65
 	right_knee.rotation.x = maxf(0, _swing) * 0.65 if grounded else 0.8
 	left_arm.rotation.x = -_swing * 0.65 if grounded else -0.4
 	var attack_phase: float = 1.0 - attack_time / 0.55
 	var strike: float = sin(attack_phase * PI) * 2.1 if attack_time > 0 else 0.0
-	axe_arm.rotation.x = _swing * 0.4 + strike
+	axe_arm.rotation.x = _swing * 0.4 - strike
 	axe_arm.rotation.z = -0.08 - strike * 0.15
 	left_arm.rotation.z = 0.08
 	avatar.position.y = (absf(sin(_stride)) * 0.035 * movement if grounded else 0.0) - _landing * 0.35
@@ -387,6 +391,10 @@ func _animate(delta: float, speed: float, grounded: bool) -> void:
 		axe_arm.rotation.x = -sin(_age*5)*0.8
 		left_leg.rotation.x = sin(_age*6)*0.25
 		right_leg.rotation.x = -sin(_age*6)*0.25
+	if is_instance_valid(boat):
+		left_leg.rotation.x=-1.2;right_leg.rotation.x=-1.2
+		left_knee.rotation.x=1.5;right_knee.rotation.x=1.5
+		left_arm.rotation.x=-0.7+sin(_age*4)*0.35;axe_arm.rotation.x=-0.7-sin(_age*4)*0.35
 	if vitals.hp <= 0:
 		avatar.rotation.z = move_toward(avatar.rotation.z, -1.3, delta * 3.0)
 		avatar.position.y = -0.1
@@ -403,6 +411,7 @@ func attack() -> bool:
 
 
 func respawn() -> void:
+	boat=null
 	set_meta("death_handled",false)
 	_clear_intent()
 	attack_time = 0.0
@@ -428,7 +437,7 @@ func export_state() -> Dictionary:
 		"velocity": [velocity.x, velocity.y, velocity.z],
 		"yaw": yaw, "hp": vitals.hp, "stamina": stamina,
 		"attack_time": attack_time, "grounded": is_on_floor(),
-		"appearance": appearance, "creation_pending": creation_pending,
+		"boat": boat.structure_id if is_instance_valid(boat) else 0, "appearance": appearance, "creation_pending": creation_pending,
 		"blocking": blocking, "crouching": crouching, "dodging": dodging,
 		"equipment": visual_equipment, "action_kind": action_kind, "action_left": action_left, "swimming": swimming,
 	}
@@ -451,6 +460,7 @@ func apply_state(data: Dictionary) -> void:
 	vitals.hp = clampi(int(data.get("hp", 100)), 0, 100)
 	if data.get("appearance") is Dictionary:
 		set_appearance(data["appearance"])
+	boat=world.get_structure(int(data.get("boat",0))) if world!=null and world.has_method("get_structure") else null
 	creation_pending = bool(data.get("creation_pending", false))
 	visible = not creation_pending
 	blocking = bool(data.get("blocking", false))
@@ -480,3 +490,16 @@ func play_action(kind: String, seconds: float) -> void:
 	action_kind = kind
 	action_left = minf(30, seconds)
 	if is_instance_valid(rig) and rig.has_method("start_action"): rig.start_action(kind, seconds)
+
+func _sail(delta: float) -> void:
+	_intent_age+=delta
+	if _intent_age>0.5:_clear_intent()
+	boat.rotation.y-=_move.x*delta*0.8
+	var next:Vector3=boat.position-boat.global_basis.z*(-_move.y)*5.0*delta
+	if world.contains_position(next) and world.terrain_height(next.x,next.z)<world.water_level-0.65:
+		var query:=PhysicsRayQueryParameters3D.create(boat.position+Vector3.UP*0.5,next+Vector3.UP*0.5,1,[boat.get_rid(),get_rid()])
+		if get_world_3d().direct_space_state.intersect_ray(query).is_empty():boat.position=next
+	boat.position.y=world.water_level+0.12
+	position=boat.position+Vector3.UP*0.25;velocity=Vector3.ZERO
+	yaw=boat.rotation.y;rotation.y=yaw
+	_animate(delta,0,true)

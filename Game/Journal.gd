@@ -75,7 +75,7 @@ static func valid(data: Variant) -> bool:
 	if not data is Dictionary or data.size() != 5: return false
 	for field in ["cells", "achievements", "stats"]:
 		if not data.get(field) is Dictionary: return false
-	if data["cells"].size() > 2048 or data["achievements"].size() > 32 or data["stats"].size() > 32: return false
+	if data["cells"].size() > 8192 or data["achievements"].size() > 32 or data["stats"].size() > 32: return false
 	for field in ["cells", "achievements"]:
 		for key in data[field]:
 			if not key is String or key.length() > 64 or not data[field][key] is bool: return false

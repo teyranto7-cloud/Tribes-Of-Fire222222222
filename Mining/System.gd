@@ -2,6 +2,8 @@ extends Node3D
 const Balance = preload("res://Game/Balance.gd")
 const Shapes = preload("res://World/Shapes.gd")
 const KINDS := ["stone", "coal", "copper_ore", "tin_ore", "iron_ore", "silver_ore", "gold_ore", "sulfur", "rare_ore", "berries", "fiber", "wood"]
+const EXTRA_KINDS := ["herb", "petals", "clay", "sand", "soil"]
+var visibility_left:float=0.0
 var world
 var regrowth: Array = []
 var nodes: Array[StaticBody3D] = []
@@ -10,8 +12,8 @@ var hits: Array[int] = []
 var _cooldowns: Dictionary = {}
 func setup(value) -> void:
 	world = value
-	for i in range(22):
-		var kind: String = KINDS[i % KINDS.size()]
+	for i in range(158):
+		var kind: String = resource_kind(i)
 		var p := Vector3(4, 0, -1) if i == 0 else Vector3(sin(i * 2.4) * (8 + i * 1.6), 0, cos(i * 2.4) * (8 + i * 1.6))
 		if i == 9:
 			p = Vector3(-4, 0, 1)
@@ -20,7 +22,7 @@ func setup(value) -> void:
 		body.position = p
 		add_child(body)
 		var color := Color("#747a78")
-		if kind == "berries" or kind == "fiber":
+		if kind in ["berries", "fiber", "herb", "petals"]:
 			color = Color("#456e40")
 		elif kind != "stone":
 			color = Color.from_hsv(float(i % 9) / 9, 0.3, 0.6)
@@ -29,7 +31,31 @@ func setup(value) -> void:
 		for j in range(5):
 			var gem := Shapes.sphere(body, 0.13 if kind == "berries" else 0.19, Vector3(sin(j * 2.4) * 0.35, 0.55, cos(j * 2.4) * 0.35), Color("#ab4944") if kind == "berries" else color.lightened(0.16))
 			gem.scale.y = 1.3
+		if kind in ["herb","petals","fiber"]:
+			base.hide()
+			for child in body.get_children():
+				if child is MeshInstance3D: child.hide()
+			for j in range(5):
+				var stem_at:=Vector3(sin(j*2.4)*0.22,0.25,cos(j*2.4)*0.22)
+				Shapes.cylinder(body,0.018,0.5,stem_at,Color("#52784d"))
+				for side in [-1,1]:
+					var leaf=Shapes.sculpted(body,stem_at+Vector3(side*0.10,0.02,0),Vector3(0.14,0.22,0.04),Color("#6d9e51"),"leaf")
+					leaf.rotation.z=side*0.7
+				if kind!="fiber":
+					for petal in range(5):
+						var a:=float(petal)*TAU/5
+						var flower=Shapes.sphere(body,0.065,stem_at+Vector3(cos(a)*0.06,0.28,sin(a)*0.06),Color("#ad83c6") if kind=="herb" else Color("#f1bf64"))
+						flower.scale.y=0.3
+		# Hidden placeholder meshes must not be baked back into the live plant.
+		for child in body.get_children():
+			if child is MeshInstance3D and not child.visible: child.free()
 		Shapes.consolidate(body)
+		var label:=Label3D.new()
+		label.text=preload("res://Items/Catalog.gd").display_name(kind)
+		label.position.y=1.15;label.font_size=30;label.pixel_size=0.007
+		label.billboard=BaseMaterial3D.BILLBOARD_ENABLED;label.no_depth_test=false
+		label.visibility_range_end=12
+		body.add_child(label)
 		var shape := SphereShape3D.new()
 		shape.radius = 0.56
 		Shapes.collider(body, shape, Vector3(0, 0.4, 0))
@@ -37,11 +63,12 @@ func setup(value) -> void:
 		stocks.append(8)
 		hits.append(0)
 		regrowth.append(0.0)
-func closest(body: Node3D, reach: float = 3.0, facing: bool = false) -> int:
+func closest(body: Node3D, reach: float = 3.0, facing: bool = false, hand_only: bool = false) -> int:
 	var chosen := -1
 	for i in range(nodes.size()):
+		if hand_only and resource_kind(i) not in ["stone","wood","fiber","berries","herb","petals","clay","sand","soil"]: continue
 		var offset := nodes[i].global_position - body.global_position
-		if stocks[i] <= 0 or offset.length() > reach:
+		if stocks[i] <= 0 or not nodes[i].visible or offset.length() > reach:
 			continue
 		if facing and offset.normalized().dot(-body.global_basis.z) < 0.3:
 			continue
@@ -56,8 +83,8 @@ func mine(body, inventory, id: int, hand: bool = false, ground_reward: bool = fa
 	query.exclude = [body.get_rid(), nodes[id].get_rid()]
 	if not get_world_3d().direct_space_state.intersect_ray(query).is_empty():
 		return false
-	var kind: String = KINDS[id % KINDS.size()]
-	if hand and kind not in ["berries", "fiber", "stone", "wood"]:
+	var kind: String = resource_kind(id)
+	if hand and kind not in ["berries", "fiber", "stone", "wood", "herb", "petals", "clay", "sand", "soil"]:
 		return false
 	if not hand and inventory.equipped_item() not in ["pickaxe", "iron_pickaxe"]:
 		return false
@@ -81,7 +108,7 @@ func mine(body, inventory, id: int, hand: bool = false, ground_reward: bool = fa
 func capture() -> Array:
 	return stocks.duplicate()
 func restore(data: Array) -> void:
-	if data.size() != stocks.size():
+	if data.size() < 22 or data.size() > stocks.size():
 		return
 	for i in range(data.size()):
 		if not (data[i] is int or data[i] is float) or data[i] < 0 or data[i] > 8 or data[i] != floorf(data[i]):
@@ -90,17 +117,40 @@ func restore(data: Array) -> void:
 		stocks[i] = int(data[i])
 		_refresh(i)
 func _refresh(i: int) -> void:
-	nodes[i].visible = stocks[i] > 0
+	nodes[i].visible = stocks[i] > 0 and (not world.has_method("has_terrain_at") or world.has_terrain_at(nodes[i].position))
 	nodes[i].collision_layer = 1 if stocks[i] > 0 else 0
 
 func restore_regrowth(values: Array) -> void:
-	if values.size() != 22: return
+	if values.size() < 22 or values.size() > stocks.size(): return
 	for value in values:
 		if not (value is int or value is float) or not is_finite(float(value)) or value < 0 or value > 4102444800: return
-	regrowth = values.duplicate()
+	for i in range(values.size()): regrowth[i] = float(values[i])
 func tick_regrowth() -> void:
 	for i in range(regrowth.size()):
 		if float(regrowth[i]) > 0 and Time.get_unix_time_from_system() >= float(regrowth[i]):
 			regrowth[i] = 0.0; stocks[i] = 8; _refresh(i)
 func reposition() -> void:
-	for node in nodes: node.position.y = world.terrain_height(node.position.x,node.position.z)
+	var rng:=RandomNumberGenerator.new()
+	rng.seed=int(world.descriptor()["seed"]) if world.has_method("descriptor") else 1337
+	var extent:float=world.half_extent()*0.80 if world.has_method("half_extent") else 48.0
+	for i in range(nodes.size()):
+		var node=nodes[i]
+		if i>=22:
+			var radius:float=10.0+float(i-22)*0.5 if i<32 else rng.randf_range(22,extent)
+			var angle:float=float(i)*2.39996
+			node.position=Vector3(cos(angle)*radius,0,sin(angle)*radius)
+		if world.has_method("descriptor") and world.descriptor()["generator"]>=2:
+			for attempt in range(80):
+				if world.terrain_height(node.position.x,node.position.z)>-2.0: break
+				node.position.x+=2.0
+		node.position.y=world.terrain_height(node.position.x,node.position.z)
+func resource_kind(id: int) -> String:
+	if id<22: return KINDS[id%KINDS.size()]
+	if id<62: return EXTRA_KINDS[(id-22)%EXTRA_KINDS.size()]
+	return KINDS[(id-62)%KINDS.size()]
+
+func _process(delta: float) -> void:
+	visibility_left-=delta
+	if visibility_left>0:return
+	visibility_left=0.3
+	for i in range(nodes.size()):_refresh(i)

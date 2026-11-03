@@ -62,11 +62,5 @@ func run() -> void:
 	voice.stop()
 	check(voice.receivers.is_empty() and not voice.microphone.playing, "Disabling voice releases all playback streams")
 	game.runtime.audio.stop()
-	Store.release_lock(game.save_folder)
-	game.running = false
-	game.session.close()
-	game.queue_free()
-	await process_frame
-	await create_timer(0.2).timeout
 	print("VOICE_REGRESSION CHECKS=%d FAILED=%d" % [checks, failed])
-	quit(0 if failed == 0 else 1)
+	await game.quit_game(0 if failed == 0 else 1,false)

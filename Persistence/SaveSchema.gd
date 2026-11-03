@@ -3,7 +3,7 @@ const Catalog = preload("res://Items/Catalog.gd")
 const Journal = preload("res://Game/Journal.gd")
 const Profile = preload("res://Progression/Profile.gd")
 const Activities = preload("res://Crafting/Activities.gd")
-const KINDS := ["foundation","floor","wall","window","door","roof","stairs","fence","bed","chest","garden","totem"]
+const KINDS := ["lantern","torch","raft","foundation","floor","wall","window","door","roof","stairs","fence","bed","chest","garden","totem"]
 static func number(value: Variant, low: float, high: float, whole: bool = false) -> bool:
 	return (value is int or value is float) and is_finite(float(value)) and value >= low and value <= high and (not whole or float(value) == floorf(float(value)))
 static func position(value: Variant, extent: float) -> bool:
@@ -11,14 +11,21 @@ static func position(value: Variant, extent: float) -> bool:
 static func descriptor(data: Dictionary) -> bool:
 	var world: Variant = data.get("world")
 	if not world is Dictionary or world.size() != 3: return false
-	if not number(world.get("seed"),0,2147483647,true) or not number(world.get("generator"),0,1,true): return false
-	return world.get("seed") == data.get("seed") and ((world["generator"] == 0 and world.get("size") == 128 and world["seed"] == 1337) or (world["generator"] == 1 and world.get("size") == 320))
+	if not number(world.get("seed"),0,2147483647,true) or not number(world.get("generator"),0,2,true): return false
+	return world.get("seed") == data.get("seed") and ((world["generator"] == 0 and world.get("size") == 128 and world["seed"] == 1337) or (world["generator"] == 1 and world.get("size") == 320) or (world["generator"] == 2 and world.get("size") == 1536))
 static func extra(data: Dictionary, extent: float) -> bool:
+	var edits:Variant=data.get("terrain_changes",{})
+	if not edits is Dictionary or edits.size()>1024:return false
+	for cell in edits:
+		if not cell is String:return false
+		var parts:PackedStringArray=cell.split(",")
+		if parts.size()!=2 or not parts[0].is_valid_int() or not parts[1].is_valid_int():return false
+		if absf(float(parts[0]))>extent/4+1 or absf(float(parts[1]))>extent/4+1 or not number(edits[cell],0,4):return false
 	var rules: Variant = data.get("rules",{})
 	if not rules is Dictionary or rules.size()>6: return false
 	for key in rules:
 		if key=="pvp":
-			if rules[key] not in ["on","off"]: return false
+			if rules[key] not in ["on","off","war"]: return false
 		elif key=="difficulty":
 			if rules[key] not in ["peaceful","normal","hard"]: return false
 		elif key=="death_loss":
@@ -48,9 +55,9 @@ static func extra(data: Dictionary, extent: float) -> bool:
 		if not fish is Dictionary or not number(fish.get("id"),0,11,true) or fish_ids.has(int(fish["id"])) or not number(fish.get("stock"),0,8,true) or not number(fish.get("restock_at"),0,4102444800): return false
 		fish_ids[int(fish["id"])]=true
 	var timers: Variant = data.get("resource_timers",{})
-	if not timers is Dictionary or timers.size()>4096: return false
+	if not timers is Dictionary or timers.size()>16384: return false
 	for key in timers:
-		if not key is String or not key.is_valid_int() or not number(int(key),0,8191,true) or not number(timers[key],0,4102444800): return false
+		if not key is String or not key.is_valid_int() or not number(int(key),0,65535,true) or not number(timers[key],0,4102444800): return false
 	var fires: Variant = data.get("fire_states",[])
 	if not fires is Array or fires.size()>32: return false
 	for fire in fires:
@@ -72,7 +79,7 @@ static func extra(data: Dictionary, extent: float) -> bool:
 			if not tech is String or not Profile.technologies().has(tech) or seen.has(tech): return false
 			seen[tech]=true
 	var regrowth: Variant = data.get("resource_regrowth",[])
-	if not regrowth is Array or (not regrowth.is_empty() and regrowth.size()!=22): return false
+	if not regrowth is Array or (not regrowth.is_empty() and (regrowth.size()<22 or regrowth.size()>256)): return false
 	for deadline in regrowth:
 		if not number(deadline,0,4102444800): return false
 	for player in data.get("players",{}).values():

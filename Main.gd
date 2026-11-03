@@ -172,7 +172,8 @@ func _empty_world(seed_value: int = -1) -> Dictionary:
 	if seed_value < 0:
 		var entropy := Crypto.new().generate_random_bytes(4)
 		seed_value = (int(entropy.decode_u32(0)) if entropy.size()==4 else Time.get_ticks_usec()) & 0x7fffffff
-	var description := {"seed":seed_value,"generator":1,"size":320}
+	seed_value=seed_value & 0x7fffffff
+	var description := {"seed":seed_value,"generator":2,"size":1536}
 	var sampler=WorldScript.Terrain.new(description)
 	var loot: Array = []
 	for place in sampler.locations:
@@ -418,6 +419,8 @@ func _receive_action(id: int, action: String) -> void:
 		return
 	match action:
 		"attack":
+			if inv.equipped_item()=="shovel":
+				runtime.command(id,"dig",{});return
 			if inv.equipped_item() in ["pickaxe", "iron_pickaxe"]:
 				runtime.command(id, "mine", {})
 				return
@@ -454,7 +457,7 @@ func snapshot() -> Dictionary:
 		records[session.player_key(id)] = _player_record(id)
 	var description: Dictionary = world.descriptor()
 	var data := {"version": 4, "seed": description["seed"], "world": description, "players": records,
-		"rules": _saved_rules(), "structures": world.building_records(), "resource_timers": world.resource_timers.duplicate(), "fire_states": world.fire_states(), "fishing": world.fish_states(), "cut": world.cut_ids(),
+		"rules": _saved_rules(), "structures": world.building_records(), "resource_timers": world.resource_timers.duplicate(), "fire_states": world.fire_states(), "fishing": world.fish_states(), "terrain_changes": world.sampler.changes.duplicate(true), "cut": world.cut_ids(),
 		"fires": world.fire_positions(), "shelters": world.shelter_positions(),
 		"phase": clock.elapsed, "weather": weather.serialize()}
 	data.merge(runtime.save_state(), true)
@@ -487,9 +490,11 @@ func network_state(recipient_id: int = 0) -> Dictionary:
 			record.erase("storage")
 	var data := {"players": bodies, "world": world.descriptor(), "structures": building_data,
 		"resource_timers": world.resource_timers.duplicate(), "fire_states": world.fire_states(), "fishing": world.fish_states(),
-		"cut": world.cut_ids(), "fires": world.fire_positions(), "shelters": world.shelter_positions(),
+		"terrain_changes": world.sampler.changes.duplicate(true), "cut": world.cut_ids(), "fires": world.fire_positions(), "shelters": world.shelter_positions(),
 		"phase": clock.elapsed, "weather": weather.serialize(), "rules": _saved_rules()}
 	data.merge(runtime.save_state(), true)
+	for station in data.get("workshops",[]):
+		if not runtime.tribes.can_build(station["owner"],session.player_key(recipient_id)): station.erase("machine")
 	data.erase("communication")
 	return data
 
@@ -499,7 +504,7 @@ func _receive_state(data: Dictionary) -> void:
 	snapshots_received += 1
 	running = true
 	world.configure_world(data.get("world", {"seed": 1337, "generator": 0, "size": 128}))
-	var signature: int = hash([data["cut"], data["fires"], data["shelters"], data.get("structures", []), data.get("fire_states", []), data.get("fishing", [])])
+	var signature: int = hash([data.get("terrain_changes",{}),data["cut"], data["fires"], data["shelters"], data.get("structures", []), data.get("fire_states", []), data.get("fishing", [])])
 	if signature != world_signature:
 		world.restore(data)
 		world_signature = signature
@@ -534,6 +539,8 @@ func _receive_state(data: Dictionary) -> void:
 	for id in players.keys():
 		if not id in ids:
 			_remove_player(id)
+	if snapshots_received==1:
+		smoke_elapsed=0.0;_last_wall_usec=Time.get_ticks_usec()
 	if player != null:
 		if player.creation_pending:
 			if DisplayServer.get_name() == "headless":
@@ -742,7 +749,7 @@ func _process(delta: float) -> void:
 		_journal_timer = 0.0
 	world.apply_weather(weather.state())
 	world.illuminate(clock)
-	_run_cli_checks(delta)
+	_run_cli_checks(wall_delta)
 	if not running or quitting:
 		return
 	if session.is_authority():

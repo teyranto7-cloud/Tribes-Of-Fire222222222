@@ -122,14 +122,5 @@ func run() -> void:
 	check(absf(simulated - wall) < 0.35 and absf(exposed - wall) < 0.35, "Day and rain follow monotonic time even when Godot caps process and physics delta at five FPS")
 	Engine.max_fps = old_fps
 	Engine.max_physics_steps_per_frame = old_steps
-	Store.release_lock(game.save_folder)
-	game.running = false
-	game.runtime.audio.stop()
-	game.runtime.voice.stop()
-	game._stop_audio(game)
-	game.session.close()
-	game.queue_free()
-	await process_frame
-	await create_timer(0.25).timeout
 	print("RELIABILITY CHECKS=%d FAILED=%d" % [checks, failed])
-	quit(0 if failed == 0 else 1)
+	await game.quit_game(0 if failed == 0 else 1,false)

@@ -1,7 +1,9 @@
 extends StaticBody3D
 ## Each modular piece owns its collision, state and appearance; the server owns commands.
 const Shapes = preload("res://World/Shapes.gd")
-const KINDS := ["foundation", "floor", "wall", "window", "door", "roof", "stairs", "fence", "bed", "chest", "garden", "totem"]
+const KINDS := ["lantern","torch","raft","foundation", "floor", "wall", "window", "door", "roof", "stairs", "fence", "bed", "chest", "garden", "totem"]
+var replica_target := Vector3.ZERO
+var replica_yaw: float = 0.0
 var structure_id: int = 0
 var kind: String = "foundation"
 var owner_key: String = ""
@@ -30,6 +32,7 @@ func setup(record: Dictionary) -> void:
 	add_to_group(kind)
 	_build()
 	set_open(bool(record.get("open", false)))
+	replica_target=position;replica_yaw=rotation.y
 
 func _box(size: Vector3, at: Vector3, tint: Color, solid: bool = true) -> void:
 	Shapes.box(self, size, at, tint)
@@ -42,6 +45,23 @@ func _build() -> void:
 	var wood := Color("#78583d")
 	var edge := Color("#4e3e2b")
 	match kind:
+		"lantern","torch":
+			var height:float=1.45 if kind=="torch" else 0.55
+			Shapes.cylinder(self,0.06,height,Vector3(0,height/2,0),wood)
+			Shapes.sculpted(self,Vector3(0,height,0),Vector3(0.22,0.35,0.22),Color("#ffbb66"),"leaf").material_override=Shapes.material(Color("#ffb457"),1.8)
+			var light:=OmniLight3D.new();light.position.y=height;light.light_color=Color("#ffd09b");light.light_energy=1.5;light.omni_range=7;add_child(light)
+			if kind=="lantern":
+				for x in [-0.13,0.13]:
+					for z in [-0.13,0.13]:_box(Vector3(0.025,0.36,0.025),Vector3(x,height,z),edge,false)
+		"raft":
+			for x in range(7):
+				var log_mesh=Shapes.cylinder(self,0.17,3.8,Vector3((x-3)*0.33,0,0),wood)
+				log_mesh.rotation.x=PI/2
+			_box(Vector3(2.5,0.12,0.18),Vector3(0,0.15,-1.2),edge,false)
+			_box(Vector3(2.5,0.12,0.18),Vector3(0,0.15,1.2),edge,false)
+			var floor_shape:=BoxShape3D.new();floor_shape.size=Vector3(2.4,0.35,3.8)
+			Shapes.collider(self,floor_shape,Vector3.ZERO)
+			Shapes.beam(self,Vector3(1.2,0.3,0.8),Vector3(1.8,-0.25,-0.5),0.05,edge)
 		"foundation", "floor":
 			for i in range(8): _box(Vector3(0.48, 0.25, 4.0), Vector3(-1.75 + i * 0.5, 0.13, 0), wood.lightened(i % 3 * 0.025), false)
 			var shape := BoxShape3D.new(); shape.size = Vector3(4, 0.25, 4)
@@ -122,3 +142,8 @@ func get_record() -> Dictionary:
 	if kind == "chest": result["storage"] = storage.duplicate(true)
 	if kind == "bed": result["bound_to"] = bound_to
 	return result
+
+func _process(delta: float) -> void:
+	if kind=="raft" and not is_multiplayer_authority():
+		position=position.lerp(replica_target,1-exp(-12*delta))
+		rotation.y=lerp_angle(rotation.y,replica_yaw,1-exp(-12*delta))

@@ -214,6 +214,36 @@
       "furnace": {
         "stone": 12,
         "wood": 4
+      },
+      "sawmill": {
+        "wood": 18,
+        "stone": 8
+      },
+      "loom": {
+        "wood": 12,
+        "fiber": 8
+      },
+      "crusher": {
+        "wood": 12,
+        "stone": 14
+      },
+      "raft": {
+        "plank": 8,
+        "rope": 3
+      },
+      "totem": {
+        "wood": 12,
+        "stone": 8
+      },
+      "lantern": {
+        "wood": 2,
+        "glass": 2,
+        "copper_ingot": 1
+      },
+      "torch": {
+        "wood": 2,
+        "fiber": 1,
+        "sulfur": 1
       }
     },
     "maximum": 512,
@@ -491,6 +521,144 @@
       "time": 1.5,
       "era": 0,
       "category": "food"
+    },
+    "plank": {
+      "cost": {
+        "wood": 1
+      },
+      "station": "workbench",
+      "time": 2.5,
+      "era": 1,
+      "category": "materials",
+      "yield": 2
+    },
+    "cloth": {
+      "cost": {
+        "fiber": 3
+      },
+      "station": "workbench",
+      "time": 2.5,
+      "era": 2,
+      "category": "materials",
+      "yield": 1
+    },
+    "rope": {
+      "cost": {
+        "fiber": 2
+      },
+      "station": "hand",
+      "time": 2.5,
+      "era": 0,
+      "category": "materials",
+      "yield": 1
+    },
+    "brick": {
+      "cost": {
+        "clay": 2
+      },
+      "station": "furnace",
+      "time": 2.5,
+      "era": 1,
+      "category": "materials",
+      "yield": 2
+    },
+    "glass": {
+      "cost": {
+        "sand": 2,
+        "coal": 1
+      },
+      "station": "furnace",
+      "time": 2.5,
+      "era": 2,
+      "category": "materials",
+      "yield": 1
+    },
+    "silver_ingot": {
+      "cost": {
+        "silver_ore": 2,
+        "coal": 1
+      },
+      "station": "furnace",
+      "time": 2.5,
+      "era": 4,
+      "category": "materials",
+      "yield": 1
+    },
+    "gold_ingot": {
+      "cost": {
+        "gold_ore": 2,
+        "coal": 1
+      },
+      "station": "furnace",
+      "time": 2.5,
+      "era": 4,
+      "category": "materials",
+      "yield": 1
+    },
+    "bandage": {
+      "cost": {
+        "fiber": 3,
+        "herb": 1
+      },
+      "station": "hand",
+      "time": 2.5,
+      "era": 0,
+      "category": "medicine",
+      "yield": 1
+    },
+    "herbal_tea": {
+      "cost": {
+        "petals": 1,
+        "herb": 1,
+        "water": 1
+      },
+      "station": "campfire",
+      "time": 2.5,
+      "era": 0,
+      "category": "medicine",
+      "yield": 1
+    },
+    "shovel": {
+      "cost": {
+        "wood": 3,
+        "stone": 3
+      },
+      "station": "hand",
+      "time": 2.5,
+      "era": 0,
+      "category": "materials",
+      "yield": 1
+    },
+    "medical_kit": {
+      "cost": {
+        "cloth": 2,
+        "herb": 2
+      },
+      "station": "workbench",
+      "era": 2,
+      "time": 4,
+      "category": "medicine"
+    },
+    "silver_sword": {
+      "cost": {
+        "silver_ingot": 3,
+        "rare_ore": 1,
+        "wood": 2
+      },
+      "station": "workbench",
+      "era": 4,
+      "time": 4,
+      "category": "tools"
+    },
+    "gold_armor": {
+      "cost": {
+        "gold_ingot": 6,
+        "leather": 3
+      },
+      "station": "workbench",
+      "era": 4,
+      "time": 4,
+      "category": "clothing"
     }
   },
   "weapons": {
@@ -504,7 +672,9 @@
     "steel_sword": 35,
     "bow": 16,
     "pickaxe": 5,
-    "iron_pickaxe": 8
+    "iron_pickaxe": 8,
+    "shovel": 5,
+    "silver_sword": 30
   },
   "armor": {
     "leather_armor": 0.12,
@@ -512,6 +682,7 @@
     "copper_armor": 0.25,
     "bronze_armor": 0.32,
     "iron_armor": 0.45,
-    "steel_armor": 0.55
+    "steel_armor": 0.55,
+    "gold_armor": 0.42
   }
 }

@@ -49,8 +49,8 @@ def main() -> None:
             assert hashlib.sha256(f"{envelope['sequence']}:{envelope['payload']}".encode()).hexdigest() == envelope['digest']
             saved.append((envelope['sequence'], json.loads(envelope['payload'])))
         _, data = max(saved)
-        assert data['version'] == 4 and data['seed'] == 71991 and data['world']['size'] == 320
-        assert len(data['players']) == 1 and len(data['fishing']) == 12 and len(data['structures']) == 2
+        assert data['version'] == 4 and data['seed'] == 71991 and data['world']['size'] == 1536
+        assert len(data['players']) == 1 and len(data['fishing']) == 12 and len(data['structures']) == 10
         assert not (folder / 'world' / '.writer-lock').exists()
     print('SOURCE_PACKAGE CHECKS=2 FAILED=0 (fresh import, actual play/save from extracted source)')
 
